@@ -16,8 +16,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.ImageShader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -73,13 +78,11 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
     // derivedStateOf so drawer animation frames don't recompose the root.
     val backEnabled by remember { derivedStateOf { launcher.backEnabled } }
 
+    val density = LocalDensity.current
+    val scanlines = remember(settings.scanlines, density) { if (settings.scanlines) scanlineBrush(density) else null }
+
     BackHandler(enabled = backEnabled) { launcher.onBack() }
     LaunchedEffect(homePresses) { homePresses.collect { launcher.onHome() } }
-    LaunchedEffect(notifDrawer) {
-        dev.pantheon.launcher.accessibility.PantheonAccessibilityService.onInterceptShade = {
-            scope.launch { notifDrawer.open() }
-        }
-    }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { launcher.onStop() }
     val edgePx = with(LocalDensity.current) { 28.dp.toPx() }
     LaunchedEffect(dragging) { if (dragging) launcher.edgeFlipLoop(edgePx) }
@@ -90,25 +93,11 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
             .background(colors.background)
             .drawWithContent {
                 drawContent()
-                if (settings.scanlines) {
-                    val step = 4.dp.toPx()
-                    val lineColor = Color.Black.copy(alpha = 0.20f)
-                    val strokeW = 1.dp.toPx()
-                    var y = 0f
-                    while (y < size.height) {
-                        drawLine(
-                            color = lineColor,
-                            start = Offset(0f, y),
-                            end = Offset(size.width, y),
-                            strokeWidth = strokeW,
-                        )
-                        y += step
-                    }
-                }
+                // One tiled-shader rect instead of hundreds of lines per frame.
+                if (scanlines != null) drawRect(scanlines)
             },
     ) {
         val distance = constraints.maxHeight * 0.45f
-        val density = LocalDensity.current
         val homeLift = with(density) { 40.dp.toPx() }
         val drawerDrop = with(density) { 120.dp.toPx() }
 
@@ -136,6 +125,7 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                     notifications = notifications,
                     onOpenSysinfo = { launcher.showingSysinfo = true },
                     modifier = Modifier.graphicsLayer {
+                        compositingStrategy = CompositingStrategy.ModulateAlpha
                         val p = drawer.progress
                         val np = notifDrawer.progress
                         val combinedP = maxOf(p, np)
@@ -169,6 +159,7 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                     },
                     notifications = notifications,
                     modifier = Modifier.graphicsLayer {
+                        compositingStrategy = CompositingStrategy.ModulateAlpha
                         val p = drawer.progress
                         alpha = p
                         translationY = drawerDrop * (1f - p)
@@ -181,11 +172,13 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
             if (notifDrawerVisible) {
                 NotificationDrawer(
                     drawer = notifDrawer,
+                    distancePx = distance,
                     notifications = notificationItems,
                     apps = apps,
                     tags = tags,
                     onOpenSysinfo = { launcher.showingSysinfo = true },
                     modifier = Modifier.graphicsLayer {
+                        compositingStrategy = CompositingStrategy.ModulateAlpha
                         val np = notifDrawer.progress
                         alpha = np
                         translationY = -drawerDrop * (1f - np)
@@ -251,4 +244,14 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
             })
         }
     }
+}
+
+/** A 1px dark line every 4dp, as a repeating shader so the overlay costs one draw call. */
+private fun scanlineBrush(density: Density): ShaderBrush {
+    val step = with(density) { 4.dp.roundToPx() }.coerceAtLeast(2)
+    val line = with(density) { 1.dp.roundToPx() }.coerceIn(1, step - 1)
+    val bitmap = android.graphics.Bitmap.createBitmap(1, step, android.graphics.Bitmap.Config.ARGB_8888)
+    val dark = android.graphics.Color.argb(51, 0, 0, 0) // black at 20%
+    for (y in 0 until line) bitmap.setPixel(0, y, dark)
+    return ShaderBrush(ImageShader(bitmap.asImageBitmap(), TileMode.Repeated, TileMode.Repeated))
 }

@@ -11,20 +11,10 @@ class PantheonAccessibilityService : AccessibilityService() {
         instance = this
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val pkg = event.packageName?.toString()
-            if (pkg == "com.android.systemui" && isPantheonForeground) {
-                if (allowNativeShadeOnce) {
-                    allowNativeShadeOnce = false
-                } else {
-                    // Native shade attempted to open while launcher is active — dismiss and open terminal drawer
-                    performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
-                    onInterceptShade?.invoke()
-                }
-            }
-        }
-    }
+    // Only used for global actions (lock, open shade). It deliberately listens to no events:
+    // intercepting System UI windows also caught the volume panel and home presses, and the
+    // real shade always flashed open before it could be dismissed.
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
     override fun onInterrupt() {
         // No-op
@@ -43,15 +33,6 @@ class PantheonAccessibilityService : AccessibilityService() {
     companion object {
         var instance: PantheonAccessibilityService? = null
             private set
-
-        @Volatile
-        var isPantheonForeground: Boolean = false
-
-        @Volatile
-        var allowNativeShadeOnce: Boolean = false
-
-        @Volatile
-        var onInterceptShade: (() -> Unit)? = null
 
         fun isConnected(): Boolean = instance != null
 

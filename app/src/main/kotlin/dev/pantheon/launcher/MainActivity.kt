@@ -18,7 +18,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.pantheon.launcher.accessibility.PantheonAccessibilityService
 import dev.pantheon.launcher.data.BackgroundMode
 import dev.pantheon.launcher.ui.LauncherRoot
 import dev.pantheon.launcher.ui.lock.LockScreenActivity
@@ -108,14 +107,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        PantheonAccessibilityService.isPantheonForeground = true
         runCatching { container.widgets.host.startListening() }
         dev.pantheon.launcher.notifications.PantheonNotificationListener.refresh(this)
     }
 
     override fun onStop() {
         super.onStop()
-        PantheonAccessibilityService.isPantheonForeground = false
         runCatching { container.widgets.host.stopListening() }
     }
 

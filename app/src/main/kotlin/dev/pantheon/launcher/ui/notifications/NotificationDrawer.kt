@@ -20,10 +20,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.pantheon.launcher.container
@@ -43,6 +49,7 @@ import java.util.Locale
 @Composable
 fun NotificationDrawer(
     drawer: NotificationDrawerController,
+    distancePx: Float,
     notifications: List<NotificationEntry>,
     apps: List<AppEntry>,
     tags: Map<String, String>,
@@ -52,8 +59,9 @@ fun NotificationDrawer(
     val context = LocalContext.current
     val colors = Pantheon.colors
     val c = context.container
-    val byPkg = apps.groupBy { it.packageName }
-    val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    val byPkg = remember(apps) { apps.groupBy { it.packageName } }
+    val timeFmt = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+    val nested = remember(drawer, distancePx) { closeOnOverscroll(drawer, distancePx) }
 
     Box(
         modifier
@@ -151,7 +159,8 @@ fun NotificationDrawer(
                 LazyColumn(
                     Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .nestedScroll(nested),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(notifications, key = { it.key }) { entry ->
@@ -181,7 +190,6 @@ fun NotificationDrawer(
                     .fillMaxWidth()
                     .clickable {
                         drawer.close()
-                        dev.pantheon.launcher.accessibility.PantheonAccessibilityService.allowNativeShadeOnce = true
                         Actions.expandNotifications(context)
                     }
                     .padding(vertical = 4.dp),
@@ -195,6 +203,37 @@ fun NotificationDrawer(
                 )
             }
         }
+    }
+}
+
+/**
+ * The list swallows vertical drags, so without this the drawer could only be closed with
+ * [ :q ] or back once it had notifications. A swipe up past the end of the list now pulls the
+ * drawer closed, mirroring how the app drawer closes from the top of its list.
+ */
+private fun closeOnOverscroll(drawer: NotificationDrawerController, distancePx: Float) = object : NestedScrollConnection {
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+        if (drawer.progress < 1f && available.y > 0f) {
+            drawer.dragBy(available.y, distancePx)
+            return Offset(0f, available.y)
+        }
+        return Offset.Zero
+    }
+
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+        if (available.y < 0f && source == NestedScrollSource.UserInput) {
+            drawer.dragBy(available.y, distancePx)
+            return Offset(0f, available.y)
+        }
+        return Offset.Zero
+    }
+
+    override suspend fun onPreFling(available: Velocity): Velocity {
+        if (drawer.progress < 1f) {
+            drawer.settle(available.y, distancePx)
+            return available
+        }
+        return Velocity.Zero
     }
 }
 
