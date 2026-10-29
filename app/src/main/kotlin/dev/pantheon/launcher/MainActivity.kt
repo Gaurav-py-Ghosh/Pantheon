@@ -2,7 +2,9 @@ package dev.pantheon.launcher
 
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -10,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.pantheon.launcher.data.BackgroundMode
 import dev.pantheon.launcher.ui.LauncherRoot
 import dev.pantheon.launcher.ui.theme.Pantheon
 import dev.pantheon.launcher.ui.theme.PantheonTheme
@@ -32,7 +35,15 @@ class MainActivity : ComponentActivity() {
             val settings by settingsRepo.settings.collectAsStateWithLifecycle(initial)
             PantheonTheme(settings) {
                 val dark = Pantheon.colors.isDark
-                LaunchedEffect(dark) {
+                val isWallpaper = settings.backgroundMode == BackgroundMode.WALLPAPER
+                LaunchedEffect(dark, isWallpaper) {
+                    if (isWallpaper) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+                        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+                        window.setBackgroundDrawable(null)
+                    }
                     val style = if (dark) {
                         SystemBarStyle.dark(Color.TRANSPARENT)
                     } else {

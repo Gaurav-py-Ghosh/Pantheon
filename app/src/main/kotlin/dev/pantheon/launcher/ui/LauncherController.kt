@@ -71,6 +71,9 @@ class LauncherController(
         private set
     var renaming by mutableStateOf<AppEntry?>(null)
     var pickingIconFor by mutableStateOf<AppEntry?>(null)
+    var showingSettings by mutableStateOf(false)
+    var showingSysinfo by mutableStateOf(false)
+    var showingSetupWizard by mutableStateOf(false)
 
     /** Where a widget picked from the picker goes; null when the picker is closed. */
     var pickingWidget by mutableStateOf<WidgetTarget?>(null)
@@ -87,8 +90,30 @@ class LauncherController(
 
     private fun currentPage(): HomePage? = layout?.let { l -> l.pages.getOrNull(pager.currentPage.coerceIn(0, l.pages.lastIndex)) }
 
-    private fun updateSettings(transform: (Settings) -> Settings) {
+    fun updateSettings(transform: (Settings) -> Settings) {
         scope.launch { c.settings.update(transform) }
+    }
+
+    suspend fun replaceSettings(newSettings: Settings) {
+        c.settings.replace(newSettings)
+    }
+
+    fun updateLayout(transform: (HomeLayout) -> HomeLayout) {
+        c.layout.update(transform)
+    }
+
+    override fun onDoubleTap() {
+        if (!settings.doubleTapLock) return
+        val locked = dev.pantheon.launcher.accessibility.PantheonAccessibilityService.lockScreen()
+        if (!locked) {
+            toast.show("enable pantheon in accessibility settings to lock")
+            runCatching {
+                context.startActivity(
+                    Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+        }
     }
 
     // ── apps ──────────────────────────────────────────────
@@ -192,52 +217,10 @@ class LauncherController(
                     MenuItem("add widget", hint = "›") { pickingWidget = target },
                     MenuItem("add image") { addImageWidget(target) },
                     MenuItem("pages", hint = "›") { pagesMenu(anchor) },
-                    MenuItem("icon pack", hint = "›") { iconPackMenu(anchor) },
-                    MenuItem("theme", hint = "›") { themeMenu(anchor) },
-                    MenuItem("accent", hint = "›") { accentMenu(anchor) },
-                    MenuItem("notification counts") { openNotificationSettings() },
-                    MenuItem("settings", enabled = false, hint = "stage 5"),
+                    MenuItem("settings") { showingSettings = true },
                 ),
             ),
         )
-    }
-
-    private fun iconPackMenu(anchor: Rect) {
-        val packs = c.iconPacks.getInstalledPacks()
-        menu.show(
-            MenuSpec(
-                anchor,
-                "icon pack",
-                buildList {
-                    add(
-                        MenuItem("default", hint = if (settings.iconPack == null) "●" else null) {
-                            updateSettings { it.copy(iconPack = null) }
-                            toast.show("icon pack: default")
-                        },
-                    )
-                    for (p in packs) {
-                        add(
-                            MenuItem(p.label.lowercase(), hint = if (settings.iconPack == p.packageName) "●" else null) {
-                                updateSettings { it.copy(iconPack = p.packageName) }
-                                toast.show("icon pack: ${p.label.lowercase()}")
-                            },
-                        )
-                    }
-                    if (packs.isEmpty()) {
-                        add(MenuItem("no icon packs installed", enabled = false))
-                    }
-                },
-            ),
-        )
-    }
-
-    private fun openNotificationSettings() {
-        runCatching {
-            context.startActivity(
-                Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        }
     }
 
     private fun pagesMenu(anchor: Rect) {
@@ -253,34 +236,6 @@ class LauncherController(
                     MenuItem("← move left", enabled = index > 0) { movePage(-1) },
                     MenuItem("move right →", enabled = index < count - 1) { movePage(1) },
                 ),
-            ),
-        )
-    }
-
-    private fun themeMenu(anchor: Rect) {
-        menu.show(
-            MenuSpec(
-                anchor,
-                "theme",
-                ThemeMode.entries.map { mode ->
-                    MenuItem(mode.name.lowercase(), hint = if (settings.themeMode == mode) "●" else null) {
-                        updateSettings { it.copy(themeMode = mode) }
-                    }
-                },
-            ),
-        )
-    }
-
-    private fun accentMenu(anchor: Rect) {
-        menu.show(
-            MenuSpec(
-                anchor,
-                "accent",
-                Accents.presets.map { preset ->
-                    MenuItem(preset.name, hint = if (settings.accent == preset.id) "●" else null) {
-                        updateSettings { it.copy(accent = preset.id) }
-                    }
-                },
             ),
         )
     }
@@ -598,10 +553,13 @@ class LauncherController(
     // ── system navigation ─────────────────────────────────
 
     val backEnabled: Boolean
-        get() = pickingIconFor != null || renaming != null || menu.spec != null || editMode || drawer.progress > 0f
+        get() = showingSettings || showingSysinfo || showingSetupWizard || pickingIconFor != null || renaming != null || menu.spec != null || editMode || drawer.progress > 0f
 
     fun onBack() {
         when {
+            showingSettings -> showingSettings = false
+            showingSysinfo -> showingSysinfo = false
+            showingSetupWizard -> showingSetupWizard = false
             pickingIconFor != null -> pickingIconFor = null
             renaming != null -> renaming = null
             menu.spec != null -> menu.dismiss()
@@ -611,7 +569,10 @@ class LauncherController(
     }
 
     suspend fun onHome() {
-        val busy = backEnabled || pickingWidget != null || editingNotes != null || pickingIconFor != null
+        val busy = backEnabled || pickingWidget != null || editingNotes != null || pickingIconFor != null || showingSettings || showingSysinfo || showingSetupWizard
+        showingSettings = false
+        showingSysinfo = false
+        showingSetupWizard = false
         pickingIconFor = null
         pickingWidget = null
         editingNotes = null
@@ -626,6 +587,9 @@ class LauncherController(
     /** Leaving home (another app, or a picker/permission screen we opened) resets transient state. */
     fun onStop() {
         drawer.snapClosed()
+        showingSettings = false
+        showingSysinfo = false
+        showingSetupWizard = false
         pickingIconFor = null
         renaming = null
         menu.dismiss()

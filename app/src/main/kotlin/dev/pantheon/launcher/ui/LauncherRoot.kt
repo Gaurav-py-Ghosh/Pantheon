@@ -15,6 +15,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -33,6 +36,9 @@ import dev.pantheon.launcher.ui.edit.RenamePrompt
 import dev.pantheon.launcher.ui.edit.ToastHost
 import dev.pantheon.launcher.ui.home.DragGhost
 import dev.pantheon.launcher.ui.home.HomeScreen
+import dev.pantheon.launcher.ui.settings.SettingsScreen
+import dev.pantheon.launcher.ui.setup.BootScreen
+import dev.pantheon.launcher.ui.sysinfo.SysinfoPanel
 import dev.pantheon.launcher.ui.theme.Pantheon
 import dev.pantheon.launcher.ui.widgets.NotesEditor
 import dev.pantheon.launcher.ui.widgets.WidgetPicker
@@ -69,7 +75,29 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
     val edgePx = with(LocalDensity.current) { 28.dp.toPx() }
     LaunchedEffect(dragging) { if (dragging) launcher.edgeFlipLoop(edgePx) }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(colors.background)) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .background(colors.background)
+            .drawWithContent {
+                drawContent()
+                if (settings.scanlines) {
+                    val step = 4.dp.toPx()
+                    val lineColor = Color.Black.copy(alpha = 0.20f)
+                    val strokeW = 1.dp.toPx()
+                    var y = 0f
+                    while (y < size.height) {
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = strokeW,
+                        )
+                        y += step
+                    }
+                }
+            },
+    ) {
         val distance = constraints.maxHeight * 0.45f
         val density = LocalDensity.current
         val homeLift = with(density) { 40.dp.toPx() }
@@ -97,6 +125,7 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                     actions = launcher,
                     onSearch = { drawer.open(focus = true) },
                     notifications = notifications,
+                    onOpenSysinfo = { launcher.showingSysinfo = true },
                     modifier = Modifier.graphicsLayer {
                         val p = drawer.progress
                         alpha = 1f - p
@@ -104,6 +133,9 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                         val s = 1f - 0.04f * p
                         scaleX = s
                         scaleY = s
+                        if (settings.glitch && p in 0.05f..0.95f) {
+                            translationX = -((p * 137).toInt() % 7 - 3) * with(density) { 2.dp.toPx() }
+                        }
                     },
                 )
             }
@@ -128,6 +160,9 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                         val p = drawer.progress
                         alpha = p
                         translationY = drawerDrop * (1f - p)
+                        if (settings.glitch && p in 0.05f..0.95f) {
+                            translationX = ((p * 137).toInt() % 7 - 3) * with(density) { 3.dp.toPx() }
+                        }
                     },
                 )
             }
@@ -160,6 +195,31 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                 onSubmit = { launcher.setTag(entry, it) },
                 onDismiss = { launcher.renaming = null },
             )
+        }
+        if (launcher.showingSysinfo) {
+            SysinfoPanel(onDismiss = { launcher.showingSysinfo = false })
+        }
+        if (launcher.showingSettings) {
+            SettingsScreen(
+                settings = settings,
+                layoutState = layoutState,
+                apps = apps,
+                onUpdateSettings = launcher::updateSettings,
+                onReplaceSettings = launcher::replaceSettings,
+                onUpdateLayout = launcher::updateLayout,
+                onRerunSetup = {
+                    launcher.showingSettings = false
+                    launcher.showingSetupWizard = true
+                },
+                onToast = { launcher.toast.show(it) },
+                onDismiss = { launcher.showingSettings = false },
+            )
+        }
+        if (!settings.setupDone || launcher.showingSetupWizard) {
+            BootScreen(onComplete = {
+                launcher.showingSetupWizard = false
+                launcher.updateSettings { it.copy(setupDone = true) }
+            })
         }
     }
 }

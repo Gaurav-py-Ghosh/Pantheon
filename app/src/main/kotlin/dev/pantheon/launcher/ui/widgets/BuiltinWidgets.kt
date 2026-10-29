@@ -359,15 +359,20 @@ fun PhotoWidget(content: ItemContent.Photo, actions: HomeActions) {
         val index = rememberSlideIndex(photos.size, content.intervalSec)
         val current = photos[index.intValue.coerceIn(0, photos.lastIndex)]
         val exif by produceState("", current.uri) { value = media.exifLine(current.uri) }
-        val px = with(LocalDensity.current) { 360.dp.roundToPx() }
-        Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = if (content.frame) 8.dp else 0.dp)) {
-            if (content.frame) {
-                TText(current.name + if (exif.isNotEmpty()) " • $exif" else "", color = colors.textDim, size = 11.sp)
-                Spacer(Modifier.height(6.dp))
+        BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = if (content.frame) 8.dp else 0.dp)) {
+            val density = LocalDensity.current
+            val realPx = with(density) {
+                maxOf(maxWidth.roundToPx(), maxHeight.roundToPx()).coerceAtLeast(480)
             }
-            SlideArea(photos.size, index, content.fill, actions.editMode) { i ->
-                val photo = photos[i]
-                SlideImage(photo.uri, content.fill) { media.thumbnail(photo.uri, px) }
+            Column(Modifier.fillMaxSize()) {
+                if (content.frame) {
+                    TText(current.name + if (exif.isNotEmpty()) " • $exif" else "", color = colors.textDim, size = 11.sp)
+                    Spacer(Modifier.height(6.dp))
+                }
+                SlideArea(photos.size, index, content.fill, actions.editMode) { i ->
+                    val photo = photos[i]
+                    SlideImage(photo.uri, content.fill) { media.thumbnail(photo.uri, realPx) }
+                }
             }
         }
     }

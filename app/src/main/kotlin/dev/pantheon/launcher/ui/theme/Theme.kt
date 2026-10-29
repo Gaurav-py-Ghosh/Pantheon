@@ -65,10 +65,10 @@ object Accents {
     }
 }
 
-fun darkPalette(accent: Color) = PantheonColors(
-    background = Color(0xFF0D1013),
-    surface = Color(0xFF151A1E),
-    surfaceHigh = Color(0xFF1C2227),
+fun darkPalette(accent: Color, wallpaper: Boolean = false) = PantheonColors(
+    background = if (wallpaper) Color(0xCC0D1013) else Color(0xFF0D1013),
+    surface = if (wallpaper) Color(0xD8151A1E) else Color(0xFF151A1E),
+    surfaceHigh = if (wallpaper) Color(0xD81C2227) else Color(0xFF1C2227),
     border = Color(0xFF2A3138),
     text = Color(0xFFD8DDE1),
     textDim = Color(0xFF7C858D),
@@ -78,10 +78,10 @@ fun darkPalette(accent: Color) = PantheonColors(
     isDark = true,
 )
 
-fun lightPalette(accent: Color) = PantheonColors(
-    background = Color(0xFFF4F3EE),
-    surface = Color(0xFFEBEAE3),
-    surfaceHigh = Color(0xFFE2E1D9),
+fun lightPalette(accent: Color, wallpaper: Boolean = false) = PantheonColors(
+    background = if (wallpaper) Color(0xDDF4F3EE) else Color(0xFFF4F3EE),
+    surface = if (wallpaper) Color(0xE8EBEAE3) else Color(0xFFEBEAE3),
+    surfaceHigh = if (wallpaper) Color(0xE8E2E1D9) else Color(0xFFE2E1D9),
     border = Color(0xFFCFCDC3),
     text = Color(0xFF1B1D20),
     textDim = Color(0xFF6A6E72),
@@ -110,9 +110,10 @@ fun PantheonTheme(settings: Settings, content: @Composable () -> Unit) {
         ThemeMode.DARK -> true
         ThemeMode.LIGHT -> false
     }
-    val target = remember(dark, settings.accent) {
+    val wallpaper = settings.backgroundMode == dev.pantheon.launcher.data.BackgroundMode.WALLPAPER
+    val target = remember(dark, settings.accent, wallpaper) {
         val accent = Accents.resolve(settings.accent, dark)
-        if (dark) darkPalette(accent) else lightPalette(accent)
+        if (dark) darkPalette(accent, wallpaper) else lightPalette(accent, wallpaper)
     }
     val spec = tween<Color>(durationMillis = 350)
     val colors = PantheonColors(
