@@ -72,4 +72,37 @@ class LayoutOpsTest {
         assertSame(single, LayoutOps.deletePage(single, "p1"))
         assertSame(single, LayoutOps.removeEmptyPage(single, "p1"))
     }
+
+    @Test fun placeUsesPreferredCellWhenFree() {
+        val (out, page) = LayoutOps.place(layout(), ItemContent.Clock(), 2, 2, 0, 4, 6, preferX = 1, preferY = 3)!!
+        assertEquals(0, page)
+        val clock = out.pages[0].items.single()
+        assertEquals(listOf(1, 3, 2, 2), listOf(clock.x, clock.y, clock.w, clock.h))
+    }
+
+    @Test fun placeFindsFreeAreaAroundItems() {
+        val (out, _) = LayoutOps.place(layout(app("a", 0, 0), app("b", 1, 1)), ItemContent.Notes(), 2, 2, 0, 4, 6, preferX = 0, preferY = 0)!!
+        val notes = out.pages[0].items.first { it.content is ItemContent.Notes }
+        assertEquals(2 to 0, notes.x to notes.y)
+    }
+
+    @Test fun placeRejectsWidgetLargerThanGrid() {
+        assertNull(LayoutOps.place(layout(), ItemContent.Photo(), 5, 2, 0, 4, 6))
+    }
+
+    @Test fun resizeGrowsIntoFreeSpaceOnly() {
+        val base = layout(HomeItem(id = "w", x = 0, y = 0, w = 2, h = 2, content = ItemContent.Clock()), app("a", 3, 0))
+        val grown = LayoutOps.resize(base, "p1", "w", 3, 2, 4, 6)!!
+        assertEquals(3, grown.pages[0].items.first { it.id == "w" }.w)
+        assertNull(LayoutOps.resize(base, "p1", "w", 4, 2, 4, 6))
+        assertNull(LayoutOps.resize(base, "p1", "w", 2, 7, 4, 6))
+    }
+
+    @Test fun widgetMoveNeedsWholeAreaFree() {
+        val base = layout(HomeItem(id = "w", x = 0, y = 0, w = 2, h = 2, content = ItemContent.Clock()), app("a", 3, 3))
+        val moved = LayoutOps.drop(base, DragSource.Home("p1", "w"), DropTarget.Cell("p1", 2, 2), 4, 6)
+        assertSame(base, moved)
+        val ok = LayoutOps.drop(base, DragSource.Home("p1", "w"), DropTarget.Cell("p1", 0, 4), 4, 6)
+        assertEquals(0 to 4, ok.pages[0].items.first { it.id == "w" }.let { it.x to it.y })
+    }
 }

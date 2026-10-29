@@ -45,6 +45,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Set by the launcher before starting a widget's setup screen. */
+    var onConfigureResult: ((Boolean) -> Unit)? = null
+
+    @Deprecated("AppWidgetHost only offers a requestCode-based configure API")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CONFIGURE_WIDGET) {
+            onConfigureResult?.invoke(resultCode == RESULT_OK)
+            onConfigureResult = null
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        runCatching { container.widgets.host.startListening() }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        runCatching { container.widgets.host.stopListening() }
+    }
+
     private var hasFocus = false
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -59,5 +82,9 @@ class MainActivity : ComponentActivity() {
         val isHome = intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)
         val broughtToFront = intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT != 0
         if (isHome && hasFocus && !broughtToFront) homePresses.tryEmit(Unit)
+    }
+
+    companion object {
+        const val REQUEST_CONFIGURE_WIDGET = 0x5041
     }
 }

@@ -3,8 +3,12 @@ package dev.pantheon.launcher
 import android.app.Application
 import android.content.Context
 import dev.pantheon.launcher.data.AppRepository
+import dev.pantheon.launcher.data.CalendarRepository
 import dev.pantheon.launcher.data.IconCache
 import dev.pantheon.launcher.data.LayoutRepository
+import dev.pantheon.launcher.data.MediaRepository
+import dev.pantheon.launcher.data.NotesRepository
+import dev.pantheon.launcher.data.WidgetHostRepository
 import dev.pantheon.launcher.data.SettingsRepository
 import dev.pantheon.launcher.data.SystemStats
 import dev.pantheon.launcher.data.TagResolver
@@ -37,6 +41,10 @@ class AppContainer(app: Application) {
     val stats = SystemStats(app)
     val tags = TagResolver(app)
     val torch by lazy { Torch(app) }
+    val media = MediaRepository(app)
+    val calendar = CalendarRepository(app)
+    val notes = NotesRepository(app, scope)
+    val widgets = WidgetHostRepository(app)
 
     init {
         scope.launch(Dispatchers.IO) {

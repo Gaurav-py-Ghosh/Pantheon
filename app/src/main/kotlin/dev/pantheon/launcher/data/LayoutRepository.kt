@@ -49,6 +49,71 @@ sealed interface ItemContent {
     @Serializable
     @SerialName("app")
     data class App(val key: String) : ItemContent
+
+    /** Recent photos from a MediaStore album; null bucket means all photos. */
+    @Serializable
+    @SerialName("photo")
+    data class Photo(
+        val bucketId: String? = null,
+        val bucketName: String? = null,
+        val intervalSec: Int = 30,
+        val fill: Boolean = true,
+        val frame: Boolean = true,
+    ) : ItemContent
+
+    /** User-picked images copied into app storage (file names under files/images). */
+    @Serializable
+    @SerialName("image")
+    data class Images(
+        val files: List<String> = emptyList(),
+        val intervalSec: Int = 10,
+        val fill: Boolean = true,
+        val frame: Boolean = true,
+    ) : ItemContent
+
+    @Serializable
+    @SerialName("clock")
+    data class Clock(val frame: Boolean = true) : ItemContent
+
+    @Serializable
+    @SerialName("sysmon")
+    data class Sysmon(val frame: Boolean = true) : ItemContent
+
+    @Serializable
+    @SerialName("calendar")
+    data class Agenda(val frame: Boolean = true) : ItemContent
+
+    @Serializable
+    @SerialName("notes")
+    data class Notes(val frame: Boolean = true) : ItemContent
+
+    /** A real Android widget hosted through AppWidgetHost. */
+    @Serializable
+    @SerialName("appwidget")
+    data class AppWidget(val appWidgetId: Int, val provider: String, val frame: Boolean = false) : ItemContent
+}
+
+val ItemContent.hasFrame: Boolean
+    get() = when (this) {
+        is ItemContent.App -> false
+        is ItemContent.Photo -> frame
+        is ItemContent.Images -> frame
+        is ItemContent.Clock -> frame
+        is ItemContent.Sysmon -> frame
+        is ItemContent.Agenda -> frame
+        is ItemContent.Notes -> frame
+        is ItemContent.AppWidget -> frame
+    }
+
+fun ItemContent.withFrame(on: Boolean): ItemContent = when (this) {
+    is ItemContent.App -> this
+    is ItemContent.Photo -> copy(frame = on)
+    is ItemContent.Images -> copy(frame = on)
+    is ItemContent.Clock -> copy(frame = on)
+    is ItemContent.Sysmon -> copy(frame = on)
+    is ItemContent.Agenda -> copy(frame = on)
+    is ItemContent.Notes -> copy(frame = on)
+    is ItemContent.AppWidget -> copy(frame = on)
 }
 
 class LayoutRepository(context: Context, private val scope: CoroutineScope) {
@@ -83,7 +148,7 @@ class LayoutRepository(context: Context, private val scope: CoroutineScope) {
         }
     }
 
-    /** First run: dock gets phone/messages/camera/email/settings, page 1 gets common apps. */
+    /** First run: dock gets phone/messages/camera/email/settings, page 1 gets a clock and common apps. */
     fun seed(apps: List<AppEntry>) {
         val byPackage = apps.filter { !it.isWork }.groupBy { it.packageName }.mapValues { it.value.first().key }
         fun pick(pkg: String?) = pkg?.let(byPackage::get)
@@ -96,7 +161,8 @@ class LayoutRepository(context: Context, private val scope: CoroutineScope) {
             defaults.gallery, defaults.maps, defaults.music, defaults.store, defaults.calendar, defaults.clock,
         ).mapNotNull(::pick).distinct().filter { it !in dock }.take(8)
 
-        val items = home.mapIndexed { i, key -> HomeItem(x = i % 4, y = i / 4, content = ItemContent.App(key)) }
+        val clock = HomeItem(x = 0, y = 0, w = 4, h = 2, content = ItemContent.Clock())
+        val items = listOf(clock) + home.mapIndexed { i, key -> HomeItem(x = i % 4, y = 2 + i / 4, content = ItemContent.App(key)) }
         update { HomeLayout(pages = listOf(HomePage(items = items)), dock = dock, seeded = true) }
     }
 }

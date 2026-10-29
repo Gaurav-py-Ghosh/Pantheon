@@ -33,6 +33,8 @@ data class Settings(
     val searchEngine: String = "default",
     val drawerMode: DrawerMode = DrawerMode.AZ,
     val glow: Boolean = true,
+    /** Default fill (crop) vs fit for new photo and image widgets. */
+    val imageFill: Boolean = true,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -50,6 +52,7 @@ class SettingsRepository(private val context: Context) {
         val searchEngine = stringPreferencesKey("search_engine")
         val drawerMode = stringPreferencesKey("drawer_mode")
         val glow = booleanPreferencesKey("glow")
+        val imageFill = booleanPreferencesKey("image_fill")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map(::read).distinctUntilChanged()
@@ -72,6 +75,7 @@ class SettingsRepository(private val context: Context) {
             searchEngine = p[K.searchEngine] ?: d.searchEngine,
             drawerMode = enumOr(p[K.drawerMode], d.drawerMode),
             glow = p[K.glow] ?: d.glow,
+            imageFill = p[K.imageFill] ?: d.imageFill,
         )
     }
 
@@ -87,6 +91,7 @@ class SettingsRepository(private val context: Context) {
         p[K.searchEngine] = s.searchEngine
         p[K.drawerMode] = s.drawerMode.name
         p[K.glow] = s.glow
+        p[K.imageFill] = s.imageFill
     }
 }
 

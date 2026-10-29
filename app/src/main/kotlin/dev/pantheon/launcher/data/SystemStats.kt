@@ -6,8 +6,10 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.net.TrafficStats
 import android.os.BatteryManager
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.StatFs
 import android.os.SystemClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -18,11 +20,15 @@ import kotlinx.coroutines.flow.flowOn
 data class SysSnapshot(
     val memUsed: Long,
     val memTotal: Long,
-    val netBitsPerSec: Long,
+    val rxBitsPerSec: Long,
+    val txBitsPerSec: Long,
     val battery: Int,
     val charging: Boolean,
     val uptimeMs: Long,
+    val storageUsed: Long,
+    val storageTotal: Long,
 ) {
+    val netBitsPerSec: Long get() = rxBitsPerSec + txBitsPerSec
     val ok: Boolean get() = battery > 15 && memUsed.toDouble() / memTotal < 0.92
 }
 
@@ -33,30 +39,35 @@ class SystemStats(context: Context) {
 
     val snapshots: Flow<SysSnapshot> = flow {
         val mem = ActivityManager.MemoryInfo()
-        var lastBytes = totalBytes()
+        var lastRx = TrafficStats.getTotalRxBytes().coerceAtLeast(0)
+        var lastTx = TrafficStats.getTotalTxBytes().coerceAtLeast(0)
         var lastTime = SystemClock.elapsedRealtime()
         while (true) {
             activityManager.getMemoryInfo(mem)
             val now = SystemClock.elapsedRealtime()
-            val bytes = totalBytes()
-            val bps = if (now > lastTime) (bytes - lastBytes).coerceAtLeast(0) * 8_000 / (now - lastTime) else 0
+            val rx = TrafficStats.getTotalRxBytes().coerceAtLeast(0)
+            val tx = TrafficStats.getTotalTxBytes().coerceAtLeast(0)
+            fun rate(bytes: Long, last: Long) = if (now > lastTime) (bytes - last).coerceAtLeast(0) * 8_000 / (now - lastTime) else 0
+            val stat = StatFs(Environment.getDataDirectory().path)
             emit(
                 SysSnapshot(
                     memUsed = mem.totalMem - mem.availMem,
                     memTotal = mem.totalMem,
-                    netBitsPerSec = bps,
+                    rxBitsPerSec = rate(rx, lastRx),
+                    txBitsPerSec = rate(tx, lastTx),
                     battery = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY),
                     charging = batteryManager.isCharging,
                     uptimeMs = now,
+                    storageUsed = stat.totalBytes - stat.availableBytes,
+                    storageTotal = stat.totalBytes,
                 ),
             )
-            lastBytes = bytes
+            lastRx = rx
+            lastTx = tx
             lastTime = now
             delay(1_000)
         }
     }.flowOn(Dispatchers.Default)
-
-    private fun totalBytes() = (TrafficStats.getTotalRxBytes() + TrafficStats.getTotalTxBytes()).coerceAtLeast(0)
 }
 
 class Torch(context: Context) {

@@ -112,22 +112,60 @@ object LayoutOps {
         return layout.copy(dock = layout.dock.withSlot(free, key))
     }
 
-    private fun freeCell(page: HomePage, columns: Int, rows: Int): Pair<Int, Int>? {
-        for (y in 0 until rows) for (x in 0 until columns) {
-            if (page.items.none { it.overlaps(x, y, 1, 1) }) return x to y
-        }
+    /** Top-left of a free [w]x[h] area, trying ([preferX], [preferY]) first. */
+    fun findFree(page: HomePage, w: Int, h: Int, columns: Int, rows: Int, preferX: Int = 0, preferY: Int = 0): Pair<Int, Int>? {
+        if (w > columns || h > rows) return null
+        fun fits(x: Int, y: Int) = page.items.none { it.overlaps(x, y, w, h) }
+        val px = preferX.coerceIn(0, columns - w)
+        val py = preferY.coerceIn(0, rows - h)
+        if (fits(px, py)) return px to py
+        for (y in 0..rows - h) for (x in 0..columns - w) if (fits(x, y)) return x to y
         return null
     }
 
-    /** Places [key] in the first free cell from [startPage] on, adding a page if all are full. Returns the page index used. */
-    fun addApp(layout: HomeLayout, key: String, startPage: Int, columns: Int, rows: Int): Pair<HomeLayout, Int> {
-        for (i in startPage.coerceAtLeast(0) until layout.pages.size) {
+    /**
+     * Places [content] at the preferred cell on [startPage] if free, else the first free area from
+     * there on, adding a page when everything is full. Null if the item is larger than the grid.
+     */
+    fun place(
+        layout: HomeLayout,
+        content: ItemContent,
+        w: Int,
+        h: Int,
+        startPage: Int,
+        columns: Int,
+        rows: Int,
+        preferX: Int = 0,
+        preferY: Int = 0,
+    ): Pair<HomeLayout, Int>? {
+        if (w > columns || h > rows) return null
+        val start = startPage.coerceIn(0, layout.pages.lastIndex)
+        for (i in start until layout.pages.size) {
             val page = layout.pages[i]
-            freeCell(page, columns, rows)?.let { (x, y) -> return layout.withItem(page.id, appItem(x, y, key)) to i }
+            val (px, py) = if (i == start) preferX to preferY else 0 to 0
+            findFree(page, w, h, columns, rows, px, py)?.let { (x, y) ->
+                return layout.withItem(page.id, HomeItem(x = x, y = y, w = w, h = h, content = content)) to i
+            }
         }
-        val page = HomePage(items = listOf(appItem(0, 0, key)))
+        val page = HomePage(items = listOf(HomeItem(x = 0, y = 0, w = w, h = h, content = content)))
         return layout.copy(pages = layout.pages + page) to layout.pages.size
     }
+
+    /** Places [key] in the first free cell from [startPage] on, adding a page if all are full. Returns the page index used. */
+    fun addApp(layout: HomeLayout, key: String, startPage: Int, columns: Int, rows: Int): Pair<HomeLayout, Int> =
+        place(layout, ItemContent.App(key), 1, 1, startPage, columns, rows) ?: (layout to startPage)
+
+    /** Null when the new size would leave the grid or overlap another item. */
+    fun resize(layout: HomeLayout, pageId: String, itemId: String, w: Int, h: Int, columns: Int, rows: Int): HomeLayout? {
+        val page = layout.page(pageId) ?: return null
+        val item = page.items.firstOrNull { it.id == itemId } ?: return null
+        if (w < 1 || h < 1 || item.x + w > columns || item.y + h > rows) return null
+        if (page.items.any { it.id != itemId && it.overlaps(item.x, item.y, w, h) }) return null
+        return layout.mapPage(pageId) { p -> p.copy(items = p.items.map { if (it.id == itemId) it.copy(w = w, h = h) else it }) }
+    }
+
+    fun updateContent(layout: HomeLayout, pageId: String, itemId: String, f: (ItemContent) -> ItemContent) =
+        layout.mapPage(pageId) { p -> p.copy(items = p.items.map { if (it.id == itemId) it.copy(content = f(it.content)) else it }) }
 
     fun addPage(layout: HomeLayout, at: Int) =
         layout.copy(pages = layout.pages.toMutableList().apply { add(at.coerceIn(0, size), HomePage()) })

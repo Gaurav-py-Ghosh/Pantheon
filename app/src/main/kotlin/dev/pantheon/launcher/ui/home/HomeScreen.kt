@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -35,8 +36,10 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +47,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -52,11 +56,13 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.pantheon.launcher.data.AppEntry
 import dev.pantheon.launcher.data.DragSource
 import dev.pantheon.launcher.data.DropTarget
+import dev.pantheon.launcher.data.HomeItem
 import dev.pantheon.launcher.data.HomeLayout
 import dev.pantheon.launcher.data.HomePage
 import dev.pantheon.launcher.data.ItemContent
@@ -71,6 +77,8 @@ import dev.pantheon.launcher.ui.edit.DragController
 import dev.pantheon.launcher.ui.edit.HomeGeometry
 import dev.pantheon.launcher.ui.edit.rememberItemDrag
 import dev.pantheon.launcher.ui.theme.Pantheon
+import dev.pantheon.launcher.ui.widgets.WidgetItem
+import kotlin.math.roundToInt
 
 typealias LaunchFn = (AppEntry, Rect?) -> Unit
 
@@ -88,6 +96,16 @@ interface HomeActions {
     fun addPage()
     fun deletePage()
     fun exitEdit()
+
+    /** Bumped after a permission prompt so widgets re-check their access. */
+    val permissionTick: Int
+    fun widgetLongPress(item: HomeItem, pageId: String, bounds: Rect)
+    fun widgetDragStart(item: HomeItem, label: String, source: DragSource, bounds: Rect, finger: Offset, grabbedAt: Offset)
+    fun resize(pageId: String, itemId: String, w: Int, h: Int)
+    fun openNotes(itemId: String)
+    fun pickImagesFor(pageId: String, itemId: String)
+    fun requestPhotoAccess()
+    fun requestCalendarAccess()
 }
 
 @Composable
@@ -112,7 +130,7 @@ fun HomeScreen(
     }
     val target by remember(layout) {
         derivedStateOf {
-            drag.active?.let { a -> geometry.targetAt(a.center(drag.finger), layout.pages.getOrNull(pagerState.currentPage)?.id) }
+            drag.active?.let { a -> geometry.dropTarget(a, drag.finger, layout.pages.getOrNull(pagerState.currentPage)?.id) }
         }
     }
 
@@ -230,6 +248,7 @@ private fun HomeGrid(
     val colors = Pantheon.colors
     val currentActions by rememberUpdatedState(actions)
     val coords = remember { CoordsHolder() }
+    var resizing by remember { mutableStateOf<ResizePreview?>(null) }
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
@@ -248,15 +267,10 @@ private fun HomeGrid(
 
         if (actions.editMode || drag.active != null) GridGuides(columns, rows, cellW, cellH)
         highlight?.let { cell ->
-            val shape = RoundedCornerShape(10.dp)
-            Box(
-                Modifier
-                    .offset(cellW * cell.x, cellH * cell.y)
-                    .size(cellW, cellH)
-                    .padding(3.dp)
-                    .background(colors.accent.copy(alpha = 0.08f), shape)
-                    .border(1.dp, colors.accent, shape),
-            )
+            val span = drag.active?.span ?: IntSize(1, 1)
+            val x = cell.x.coerceIn(0, (columns - span.width).coerceAtLeast(0))
+            val y = cell.y.coerceIn(0, (rows - span.height).coerceAtLeast(0))
+            Outline(cellW * x, cellH * y, cellW * span.width, cellH * span.height, filled = true)
         }
         page.items.forEach { item ->
             if (item.x + item.w > columns || item.y + item.h > rows) return@forEach
@@ -271,11 +285,76 @@ private fun HomeGrid(
                         is ItemContent.App -> apps[content.key]?.let { entry ->
                             AppCell(entry, tags[entry.key].orEmpty(), style, 30.dp, DragSource.Home(page.id, item.id), actions, drag)
                         }
+                        else -> WidgetItem(item, page.id, cellW * item.w, cellH * item.h, actions, drag)
                     }
                 }
             }
         }
+
+        // Edit mode: a ◢ handle on each widget's corner resizes it in whole cells.
+        if (actions.editMode) {
+            val cellWpx = with(LocalDensity.current) { cellW.toPx() }
+            val cellHpx = with(LocalDensity.current) { cellH.toPx() }
+            page.items.filter { it.content !is ItemContent.App && it.x + it.w <= columns && it.y + it.h <= rows }.forEach { item ->
+                key("resize:${item.id}") {
+                    Box(
+                        Modifier
+                            .offset(cellW * (item.x + item.w) - 34.dp, cellH * (item.y + item.h) - 34.dp)
+                            .size(34.dp)
+                            .pointerInput(item.id, item.w, item.h, columns, rows, cellWpx, cellHpx) {
+                                var dx = 0f
+                                var dy = 0f
+                                detectDragGestures(
+                                    onDragStart = {
+                                        dx = 0f
+                                        dy = 0f
+                                        resizing = ResizePreview(item.id, item.w, item.h)
+                                    },
+                                    onDragEnd = {
+                                        resizing?.let { r -> currentActions.resize(page.id, item.id, r.w, r.h) }
+                                        resizing = null
+                                    },
+                                    onDragCancel = { resizing = null },
+                                ) { change, amount ->
+                                    change.consume()
+                                    dx += amount.x
+                                    dy += amount.y
+                                    resizing = ResizePreview(
+                                        item.id,
+                                        ((item.w * cellWpx + dx) / cellWpx).roundToInt().coerceIn(1, columns - item.x),
+                                        ((item.h * cellHpx + dy) / cellHpx).roundToInt().coerceIn(1, rows - item.y),
+                                    )
+                                }
+                            },
+                        contentAlignment = Alignment.BottomEnd,
+                    ) {
+                        TText("◢", color = colors.accent, size = 20.sp, glow = true, modifier = Modifier.padding(end = 6.dp, bottom = 4.dp))
+                    }
+                }
+            }
+            resizing?.let { r ->
+                page.items.firstOrNull { it.id == r.itemId }?.let { item ->
+                    Outline(cellW * item.x, cellH * item.y, cellW * r.w, cellH * r.h, filled = false)
+                }
+            }
+        }
     }
+}
+
+private data class ResizePreview(val itemId: String, val w: Int, val h: Int)
+
+@Composable
+private fun Outline(x: Dp, y: Dp, w: Dp, h: Dp, filled: Boolean) {
+    val colors = Pantheon.colors
+    val shape = RoundedCornerShape(10.dp)
+    Box(
+        Modifier
+            .offset(x, y)
+            .size(w, h)
+            .padding(3.dp)
+            .background(if (filled) colors.accent.copy(alpha = 0.08f) else Color.Transparent, shape)
+            .border(1.dp, colors.accent, shape),
+    )
 }
 
 @Composable
@@ -452,21 +531,31 @@ private fun PageIndicator(current: Int, count: Int) {
 fun DragGhost(drag: DragController, tags: Map<String, String>, settings: Settings) {
     val active = drag.active ?: return
     val density = LocalDensity.current
+    val colors = Pantheon.colors
+    val entry = active.entry
+    val modifier = Modifier
+        .size(with(density) { active.size.width.toDp() }, with(density) { active.size.height.toDp() })
+        .graphicsLayer {
+            val topLeft = drag.finger - active.touchOffset
+            translationX = topLeft.x
+            translationY = topLeft.y
+            val s = if (entry != null) 1.12f else 1.03f
+            scaleX = s
+            scaleY = s
+            alpha = if (entry != null) 0.95f else 0.85f
+        }
+    if (entry == null) {
+        Box(modifier.terminalBox(colors, radius = 10.dp), contentAlignment = Alignment.Center) {
+            TText("[${active.label}]", color = colors.accent, size = 14.sp, glow = true)
+        }
+        return
+    }
     val style = if (active.source is DragSource.Dock) dockStyle(settings) else settings.labelStyle
     AppCellContent(
-        entry = active.entry,
-        tag = tags[active.entry.key].orEmpty(),
+        entry = entry,
+        tag = tags[entry.key].orEmpty(),
         style = style,
         iconSize = if (active.source is DragSource.Dock) 28.dp else 30.dp,
-        modifier = Modifier
-            .size(with(density) { active.size.width.toDp() }, with(density) { active.size.height.toDp() })
-            .graphicsLayer {
-                val topLeft = drag.finger - active.touchOffset
-                translationX = topLeft.x
-                translationY = topLeft.y
-                scaleX = 1.12f
-                scaleY = 1.12f
-                alpha = 0.95f
-            },
+        modifier = modifier,
     )
 }

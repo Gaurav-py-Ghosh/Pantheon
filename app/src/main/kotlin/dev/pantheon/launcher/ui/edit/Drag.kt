@@ -14,14 +14,25 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.unit.IntSize
 import dev.pantheon.launcher.data.AppEntry
 import dev.pantheon.launcher.data.DragSource
 import dev.pantheon.launcher.data.DropTarget
 import kotlin.math.max
 
-data class ActiveDrag(val source: DragSource, val entry: AppEntry, val touchOffset: Offset, val size: Size) {
-    /** Center of the dragged ghost, which decides the drop cell. */
+/** [entry] is set for apps; widgets have none and show [label] in the ghost. [span] is the item's size in cells. */
+data class ActiveDrag(
+    val source: DragSource,
+    val entry: AppEntry?,
+    val label: String,
+    val touchOffset: Offset,
+    val size: Size,
+    val span: IntSize = IntSize(1, 1),
+) {
+    /** Center of the dragged ghost, which decides the drop cell for single-cell items. */
     fun center(finger: Offset) = finger - touchOffset + Offset(size.width / 2f, size.height / 2f)
+
+    fun topLeft(finger: Offset) = finger - touchOffset
 }
 
 /** Finger positions are window coordinates. */
@@ -81,11 +92,21 @@ class HomeGeometry {
             return DropTarget.DockSlot(((p.x - dock.left) / (dock.width / dockSlots)).toInt().coerceIn(0, dockSlots - 1))
         }
         if (pageId != null && grid.contains(p)) {
-            val x = ((p.x - grid.left) / (grid.width / columns)).toInt().coerceIn(0, columns - 1)
+            val x = ((p.x - grid.left) / cellWidthPx).toInt().coerceIn(0, columns - 1)
             val y = ((p.y - grid.top) / cellHeightPx).toInt().coerceIn(0, rows - 1)
             return DropTarget.Cell(pageId, x, y)
         }
         return null
+    }
+
+    val cellWidthPx: Float get() = grid.width / columns
+
+    /** Apps drop by their center; multi-cell widgets by the cell under their top-left corner (never the dock). */
+    fun dropTarget(drag: ActiveDrag, finger: Offset, pageId: String?): DropTarget? {
+        if (drag.span == IntSize(1, 1)) return targetAt(drag.center(finger), pageId)
+        val probe = drag.topLeft(finger) + Offset(cellWidthPx / 2f, cellHeightPx / 2f)
+        val clamped = Offset(probe.x.coerceIn(grid.left, grid.right - 1f), probe.y.coerceIn(grid.top, grid.bottom - 1f))
+        return targetAt(clamped, pageId) as? DropTarget.Cell
     }
 }
 

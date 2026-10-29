@@ -33,6 +33,8 @@ import dev.pantheon.launcher.ui.edit.ToastHost
 import dev.pantheon.launcher.ui.home.DragGhost
 import dev.pantheon.launcher.ui.home.HomeScreen
 import dev.pantheon.launcher.ui.theme.Pantheon
+import dev.pantheon.launcher.ui.widgets.NotesEditor
+import dev.pantheon.launcher.ui.widgets.WidgetPicker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
@@ -53,6 +55,7 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
     val drawer = remember { DrawerController(scope) }
     val pager = rememberPagerState { layoutState.value?.pages?.size ?: 1 }
     val launcher = remember { LauncherController(context, view, scope, drawer, pager, layoutState, settingsState) }
+    launcher.bridge = rememberActivityBridge()
     val drawerVisible by remember { derivedStateOf { drawer.progress > 0f } }
     val dragging by remember { derivedStateOf { launcher.drag.active != null } }
     // derivedStateOf so drawer animation frames don't recompose the root.
@@ -129,6 +132,14 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
         DragGhost(launcher.drag, tags, settings)
         ToastHost(launcher.toast, Modifier.align(Alignment.BottomCenter))
         MenuOverlay(launcher.menu)
+        if (launcher.pickingWidget != null) {
+            WidgetPicker(
+                onBuiltin = launcher::addBuiltin,
+                onProvider = launcher::addAppWidget,
+                onDismiss = { launcher.pickingWidget = null },
+            )
+        }
+        launcher.editingNotes?.let { id -> NotesEditor(id, onClose = { launcher.editingNotes = null }) }
         launcher.renaming?.let { entry ->
             RenamePrompt(
                 entry = entry,
