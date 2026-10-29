@@ -11,6 +11,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.StatFs
 import android.os.SystemClock
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -75,7 +77,8 @@ class Torch(context: Context) {
     private val cameraId = runCatching {
         cameras.cameraIdList.firstOrNull { cameras.getCameraCharacteristics(it).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true }
     }.getOrNull()
-    private var on = false
+    var on by androidx.compose.runtime.mutableStateOf(false)
+        private set
 
     init {
         cameras.registerTorchCallback(object : CameraManager.TorchCallback() {

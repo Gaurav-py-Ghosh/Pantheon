@@ -36,6 +36,7 @@ import dev.pantheon.launcher.ui.edit.RenamePrompt
 import dev.pantheon.launcher.ui.edit.ToastHost
 import dev.pantheon.launcher.ui.home.DragGhost
 import dev.pantheon.launcher.ui.home.HomeScreen
+import dev.pantheon.launcher.ui.notifications.NotificationDrawer
 import dev.pantheon.launcher.ui.settings.SettingsScreen
 import dev.pantheon.launcher.ui.setup.BootScreen
 import dev.pantheon.launcher.ui.sysinfo.SysinfoPanel
@@ -57,14 +58,17 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
     val apps by c.apps.apps.collectAsStateWithLifecycle()
     val layoutState = c.layout.layout.collectAsStateWithLifecycle()
     val notifications by c.notifications.collectAsStateWithLifecycle()
+    val notificationItems by c.notificationItems.collectAsStateWithLifecycle()
     val byKey = remember(apps) { apps.associateBy { it.key } }
     val tags = remember(apps, settings.tags) { apps.associate { it.key to c.tags.tagFor(it, settings.tags) } }
 
     val drawer = remember { DrawerController(scope) }
+    val notifDrawer = remember { NotificationDrawerController(scope) }
     val pager = rememberPagerState { layoutState.value?.pages?.size ?: 1 }
-    val launcher = remember { LauncherController(context, view, scope, drawer, pager, layoutState, settingsState) }
+    val launcher = remember { LauncherController(context, view, scope, drawer, notifDrawer, pager, layoutState, settingsState) }
     launcher.bridge = rememberActivityBridge()
     val drawerVisible by remember { derivedStateOf { drawer.progress > 0f } }
+    val notifDrawerVisible by remember { derivedStateOf { notifDrawer.progress > 0f } }
     val dragging by remember { derivedStateOf { launcher.drag.active != null } }
     // derivedStateOf so drawer animation frames don't recompose the root.
     val backEnabled by remember { derivedStateOf { launcher.backEnabled } }
@@ -108,9 +112,9 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                 .fillMaxSize()
                 .launcherGestures(
                     drawer = drawer,
+                    notifDrawer = notifDrawer,
                     distancePx = distance,
                     enabled = !launcher.editMode,
-                    onPullDown = { Actions.expandNotifications(context) },
                 ),
         ) {
             layoutState.value?.let { layout ->
@@ -128,13 +132,16 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                     onOpenSysinfo = { launcher.showingSysinfo = true },
                     modifier = Modifier.graphicsLayer {
                         val p = drawer.progress
-                        alpha = 1f - p
-                        translationY = -homeLift * p
-                        val s = 1f - 0.04f * p
+                        val np = notifDrawer.progress
+                        val combinedP = maxOf(p, np)
+                        alpha = 1f - combinedP
+                        translationY = if (p > 0f) -homeLift * p else homeLift * np
+                        val s = 1f - 0.04f * combinedP
                         scaleX = s
                         scaleY = s
-                        if (settings.glitch && p in 0.05f..0.95f) {
-                            translationX = -((p * 137).toInt() % 7 - 3) * with(density) { 2.dp.toPx() }
+                        if (settings.glitch && (p in 0.05f..0.95f || np in 0.05f..0.95f)) {
+                            val gp = if (p > 0f) p else np
+                            translationX = -((gp * 137).toInt() % 7 - 3) * with(density) { 2.dp.toPx() }
                         }
                     },
                 )
@@ -162,6 +169,23 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                         translationY = drawerDrop * (1f - p)
                         if (settings.glitch && p in 0.05f..0.95f) {
                             translationX = ((p * 137).toInt() % 7 - 3) * with(density) { 3.dp.toPx() }
+                        }
+                    },
+                )
+            }
+            if (notifDrawerVisible) {
+                NotificationDrawer(
+                    drawer = notifDrawer,
+                    notifications = notificationItems,
+                    apps = apps,
+                    tags = tags,
+                    onOpenSysinfo = { launcher.showingSysinfo = true },
+                    modifier = Modifier.graphicsLayer {
+                        val np = notifDrawer.progress
+                        alpha = np
+                        translationY = -drawerDrop * (1f - np)
+                        if (settings.glitch && np in 0.05f..0.95f) {
+                            translationX = ((np * 137).toInt() % 7 - 3) * with(density) { 3.dp.toPx() }
                         }
                     },
                 )

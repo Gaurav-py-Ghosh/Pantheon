@@ -83,41 +83,85 @@ class DrawerController(private val scope: CoroutineScope) {
     }
 }
 
+/** Top notification drawer open fraction, driven directly by the finger and settled with a spring. */
+@Stable
+class NotificationDrawerController(private val scope: CoroutineScope) {
+    var progress by mutableFloatStateOf(0f)
+        private set
+
+    private var job: Job? = null
+    private val spec = spring<Float>(dampingRatio = 0.9f, stiffness = 420f)
+
+    fun open() = animateTo(1f)
+
+    fun close() = animateTo(0f)
+
+    fun snapClosed() {
+        job?.cancel()
+        progress = 0f
+    }
+
+    fun dragBy(dy: Float, distance: Float) {
+        job?.cancel()
+        // Pulling down (positive dy) opens the drawer
+        progress = (progress + dy / distance).coerceIn(0f, 1f)
+    }
+
+    fun settle(velocityY: Float, distance: Float) {
+        val v = velocityY / distance
+        val target = when {
+            v > 1.5f -> 1f
+            v < -1.5f -> 0f
+            progress > 0.45f -> 1f
+            else -> 0f
+        }
+        animateTo(target, v)
+    }
+
+    private fun animateTo(target: Float, velocity: Float = 0f) {
+        job?.cancel()
+        job = scope.launch {
+            animate(progress, target, velocity, spec) { value, _ -> progress = value }
+        }
+    }
+}
+
 /**
- * Root-level vertical gestures: swipe up drags the drawer open, swipe down pulls the
- * notification shade. Placed on an untransformed parent so finger coordinates stay true
- * while the home and drawer layers move.
+ * Root-level vertical gestures: swipe up drags the app drawer open, swipe down drags the
+ * top terminal notification drawer open.
  */
 fun Modifier.launcherGestures(
     drawer: DrawerController,
+    notifDrawer: NotificationDrawerController,
     distancePx: Float,
     enabled: Boolean,
-    onPullDown: () -> Unit,
 ): Modifier =
-    pointerInput(drawer, distancePx, enabled) {
+    pointerInput(drawer, notifDrawer, distancePx, enabled) {
         if (!enabled) return@pointerInput
-        val pullThreshold = 72.dp.toPx()
         val tracker = VelocityTracker()
-        var pulled = 0f
-        var fired = false
         detectVerticalDragGestures(
-            onDragStart = {
-                tracker.resetTracking()
-                pulled = 0f
-                fired = false
+            onDragStart = { tracker.resetTracking() },
+            onDragEnd = {
+                val vy = tracker.calculateVelocity().y
+                if (notifDrawer.progress > 0f) {
+                    notifDrawer.settle(vy, distancePx)
+                } else if (drawer.progress > 0f) {
+                    drawer.settle(vy, distancePx)
+                }
             },
-            onDragEnd = { drawer.settle(tracker.calculateVelocity().y, distancePx) },
-            onDragCancel = { drawer.settle(0f, distancePx) },
+            onDragCancel = {
+                notifDrawer.settle(0f, distancePx)
+                drawer.settle(0f, distancePx)
+            },
         ) { change, dy ->
             tracker.addPosition(change.uptimeMillis, change.position)
             change.consume()
-            if (drawer.progress > 0f || dy < 0f) {
-                drawer.dragBy(dy, distancePx)
-            } else if (!fired) {
-                pulled += dy
-                if (pulled > pullThreshold) {
-                    fired = true
-                    onPullDown()
+            when {
+                notifDrawer.progress > 0f || (drawer.progress == 0f && dy > 0f) -> {
+                    notifDrawer.dragBy(dy, distancePx)
+                }
+                drawer.progress > 0f || (notifDrawer.progress == 0f && dy < 0f) -> {
+                    drawer.dragBy(dy, distancePx)
                 }
             }
         }

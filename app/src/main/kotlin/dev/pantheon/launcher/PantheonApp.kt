@@ -49,6 +49,7 @@ class AppContainer(app: Application) {
     val notes = NotesRepository(app, scope)
     val widgets = WidgetHostRepository(app)
     val notifications = PantheonNotificationListener.counts
+    val notificationItems = PantheonNotificationListener.notifications
 
     init {
         scope.launch(Dispatchers.IO) {

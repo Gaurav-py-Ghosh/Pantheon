@@ -57,6 +57,7 @@ class LauncherController(
     private val view: View,
     private val scope: CoroutineScope,
     val drawer: DrawerController,
+    val notifDrawer: NotificationDrawerController,
     val pager: PagerState,
     private val layoutState: State<HomeLayout?>,
     private val settingsState: State<Settings>,
@@ -553,10 +554,11 @@ class LauncherController(
     // ── system navigation ─────────────────────────────────
 
     val backEnabled: Boolean
-        get() = showingSettings || showingSysinfo || showingSetupWizard || pickingIconFor != null || renaming != null || menu.spec != null || editMode || drawer.progress > 0f
+        get() = notifDrawer.progress > 0f || showingSettings || showingSysinfo || showingSetupWizard || pickingIconFor != null || renaming != null || menu.spec != null || editMode || drawer.progress > 0f
 
     fun onBack() {
         when {
+            notifDrawer.progress > 0f -> notifDrawer.close()
             showingSettings -> showingSettings = false
             showingSysinfo -> showingSysinfo = false
             showingSetupWizard -> showingSetupWizard = false
@@ -580,6 +582,7 @@ class LauncherController(
         menu.dismiss()
         editMode = false
         dragCancel()
+        if (notifDrawer.progress > 0f) notifDrawer.close()
         if (drawer.progress > 0f) drawer.close()
         if (!busy) pager.animateScrollToPage(0)
     }
@@ -587,6 +590,7 @@ class LauncherController(
     /** Leaving home (another app, or a picker/permission screen we opened) resets transient state. */
     fun onStop() {
         drawer.snapClosed()
+        notifDrawer.snapClosed()
         showingSettings = false
         showingSysinfo = false
         showingSetupWizard = false
