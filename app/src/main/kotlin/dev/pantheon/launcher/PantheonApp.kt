@@ -3,6 +3,7 @@ package dev.pantheon.launcher
 import android.app.Application
 import android.content.Context
 import dev.pantheon.launcher.data.AppRepository
+import dev.pantheon.launcher.data.Brightness
 import dev.pantheon.launcher.data.CalendarRepository
 import dev.pantheon.launcher.data.IconCache
 import dev.pantheon.launcher.data.IconPackManager
@@ -48,6 +49,7 @@ class AppContainer(app: Application) {
     val calendar = CalendarRepository(app)
     val notes = NotesRepository(app, scope)
     val widgets = WidgetHostRepository(app)
+    val brightness = Brightness(app)
     val notifications = PantheonNotificationListener.counts
     val notificationItems = PantheonNotificationListener.notifications
 

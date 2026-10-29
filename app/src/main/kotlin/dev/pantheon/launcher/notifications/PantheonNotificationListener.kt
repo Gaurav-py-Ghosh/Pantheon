@@ -1,9 +1,14 @@
 package dev.pantheon.launcher.notifications
 
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.PendingIntent
+import android.app.RemoteInput
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationManagerCompat
@@ -20,6 +25,15 @@ data class NotificationEntry(
     val postTime: Long,
     val isClearable: Boolean,
     val contentIntent: PendingIntent? = null,
+    val autoCancel: Boolean = false,
+    val actions: List<NotificationAction> = emptyList(),
+)
+
+/** A notification button; [remoteInput] is set for inline-reply actions. */
+data class NotificationAction(
+    val title: String,
+    val intent: PendingIntent,
+    val remoteInput: RemoteInput? = null,
 )
 
 class PantheonNotificationListener : NotificationListenerService() {
@@ -27,7 +41,13 @@ class PantheonNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         activeInstance = this
+        _dnd.value = currentInterruptionFilter.isDnd()
         updateCounts()
+    }
+
+    override fun onInterruptionFilterChanged(interruptionFilter: Int) {
+        super.onInterruptionFilterChanged(interruptionFilter)
+        _dnd.value = interruptionFilter.isDnd()
     }
 
     override fun onListenerDisconnected() {
@@ -51,10 +71,16 @@ class PantheonNotificationListener : NotificationListenerService() {
 
     fun updateCounts() {
         val active = runCatching { activeNotifications }.getOrNull() ?: return
-        val valid = active.filter { sbn ->
+        val shown = active.filter { sbn ->
             !sbn.isOngoing &&
                 (sbn.notification.flags and Notification.FLAG_ONGOING_EVENT == 0) &&
                 sbn.packageName != packageName
+        }
+        // A group summary repeats its children; drop it when any child is present.
+        val groupsWithChildren = shown.filter { it.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 }
+            .mapNotNull { it.groupKey }.toSet()
+        val valid = shown.filter { sbn ->
+            sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 || sbn.groupKey !in groupsWithChildren
         }
         val map = valid
             .groupBy { it.packageName }
@@ -80,6 +106,15 @@ class PantheonNotificationListener : NotificationListenerService() {
                 postTime = sbn.postTime,
                 isClearable = sbn.isClearable,
                 contentIntent = sbn.notification.contentIntent,
+                autoCancel = sbn.notification.flags and Notification.FLAG_AUTO_CANCEL != 0,
+                actions = sbn.notification.actions.orEmpty().mapNotNull { a ->
+                    val intent = a.actionIntent ?: return@mapNotNull null
+                    NotificationAction(
+                        title = a.title?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null,
+                        intent = intent,
+                        remoteInput = a.remoteInputs?.firstOrNull { it.allowFreeFormInput },
+                    )
+                }.take(3),
             )
         }.sortedByDescending { it.postTime }
 
@@ -104,9 +139,60 @@ class PantheonNotificationListener : NotificationListenerService() {
             runCatching { activeInstance?.cancelAllNotifications() }
         }
 
-        fun open(entry: NotificationEntry) {
-            runCatching { entry.contentIntent?.send() }
+        private val _dnd = MutableStateFlow(false)
+        /** True while Do Not Disturb (priority, alarms or total silence) is on. */
+        val dnd: StateFlow<Boolean> = _dnd.asStateFlow()
+
+        private fun Int.isDnd() = this != INTERRUPTION_FILTER_ALL && this != INTERRUPTION_FILTER_UNKNOWN
+
+        /** Listeners may set the interruption filter without separate DND-policy access. */
+        fun setDnd(on: Boolean): Boolean {
+            val inst = activeInstance ?: return false
+            return runCatching {
+                inst.requestInterruptionFilter(if (on) INTERRUPTION_FILTER_PRIORITY else INTERRUPTION_FILTER_ALL)
+            }.isSuccess
         }
+
+        fun open(entry: NotificationEntry) {
+            val inst = activeInstance
+            val sent = entry.contentIntent?.let { send(inst, it, null) } ?: false
+            if (sent && entry.autoCancel) dismiss(entry.key)
+        }
+
+        /** Fires a notification button, attaching [reply] for inline-reply actions. */
+        fun runAction(action: NotificationAction, reply: String? = null): Boolean {
+            val fillIn = if (action.remoteInput != null && !reply.isNullOrBlank()) {
+                Intent().also {
+                    RemoteInput.addResultsToIntent(
+                        arrayOf(action.remoteInput),
+                        it,
+                        Bundle().apply { putCharSequence(action.remoteInput.resultKey, reply) },
+                    )
+                }
+            } else {
+                null
+            }
+            return send(activeInstance, action.intent, fillIn)
+        }
+
+        /**
+         * Android 14+ only lets a PendingIntent start an activity from here if the sender opts in;
+         * the launcher is the visible app, so it may.
+         */
+        private fun send(context: Context?, intent: PendingIntent, fillIn: Intent?): Boolean = runCatching {
+            val options = if (Build.VERSION.SDK_INT >= 34) {
+                ActivityOptions.makeBasic().apply {
+                    @Suppress("DEPRECATION")
+                    setPendingIntentBackgroundActivityStartMode(
+                        if (Build.VERSION.SDK_INT >= 36) ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE
+                        else ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
+                    )
+                }.toBundle()
+            } else {
+                null
+            }
+            intent.send(context, 0, fillIn, null, null, null, options)
+        }.isSuccess
 
         fun isAccessGranted(context: Context): Boolean {
             return NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
