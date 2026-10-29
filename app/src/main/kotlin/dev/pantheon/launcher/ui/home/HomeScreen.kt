@@ -119,6 +119,7 @@ fun HomeScreen(
     geometry: HomeGeometry,
     actions: HomeActions,
     onSearch: () -> Unit,
+    notifications: Map<String, Int> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -166,12 +167,13 @@ fun HomeScreen(
                     drag = drag,
                     actions = actions,
                     highlight = (target as? DropTarget.Cell)?.takeIf { it.pageId == page.id },
+                    notifications = notifications,
                 )
             }
         }
         if (layout.pages.size > 1) PageIndicator(pagerState.currentPage, layout.pages.size)
         Spacer(Modifier.height(10.dp))
-        Dock(layout, apps, tags, settings, drag, geometry, actions, highlight = (target as? DropTarget.DockSlot)?.index)
+        Dock(layout, apps, tags, settings, drag, geometry, actions, highlight = (target as? DropTarget.DockSlot)?.index, notifications = notifications)
         Spacer(Modifier.height(10.dp))
     }
 }
@@ -244,6 +246,7 @@ private fun HomeGrid(
     drag: DragController,
     actions: HomeActions,
     highlight: DropTarget.Cell?,
+    notifications: Map<String, Int> = emptyMap(),
 ) {
     val colors = Pantheon.colors
     val currentActions by rememberUpdatedState(actions)
@@ -283,7 +286,16 @@ private fun HomeGrid(
                 ) {
                     when (val content = item.content) {
                         is ItemContent.App -> apps[content.key]?.let { entry ->
-                            AppCell(entry, tags[entry.key].orEmpty(), style, 30.dp, DragSource.Home(page.id, item.id), actions, drag)
+                            AppCell(
+                                entry = entry,
+                                tag = tags[entry.key].orEmpty(),
+                                style = style,
+                                iconSize = 30.dp,
+                                source = DragSource.Home(page.id, item.id),
+                                actions = actions,
+                                drag = drag,
+                                notificationCount = notifications[entry.packageName] ?: 0,
+                            )
                         }
                         else -> WidgetItem(item, page.id, cellW * item.w, cellH * item.h, actions, drag)
                     }
@@ -379,8 +391,20 @@ private fun GridGuides(columns: Int, rows: Int, cellW: Dp, cellH: Dp) {
 
 /** Icon, `[tag]` and name, without any gestures. Shared by grid, dock and the drag ghost. */
 @Composable
-fun AppCellContent(entry: AppEntry, tag: String, style: LabelStyle, iconSize: Dp, modifier: Modifier = Modifier) {
+fun AppCellContent(
+    entry: AppEntry,
+    tag: String,
+    style: LabelStyle,
+    iconSize: Dp,
+    notificationCount: Int = 0,
+    modifier: Modifier = Modifier,
+) {
     val colors = Pantheon.colors
+    val displayTag = if (notificationCount > 0) {
+        if (tag.isNotEmpty()) "$tag:$notificationCount" else "$notificationCount"
+    } else {
+        tag
+    }
     Column(
         modifier.padding(horizontal = 2.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -389,7 +413,7 @@ fun AppCellContent(entry: AppEntry, tag: String, style: LabelStyle, iconSize: Dp
         if (style != LabelStyle.TAG) AppIconImage(entry, iconSize)
         if (style != LabelStyle.ICON) {
             Spacer(Modifier.height(6.dp))
-            TText("[$tag]", color = colors.accent, size = if (style == LabelStyle.TAG) 14.sp else 11.sp, glow = true)
+            TText("[$displayTag]", color = colors.accent, size = if (style == LabelStyle.TAG) 14.sp else 11.sp, glow = true)
         }
         if (style == LabelStyle.ICON_TAG_NAME) {
             TText(entry.label.lowercase(), size = 12.sp)
@@ -407,6 +431,7 @@ fun AppCell(
     source: DragSource,
     actions: HomeActions,
     drag: DragController,
+    notificationCount: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val coords = remember { CoordsHolder() }
@@ -432,6 +457,7 @@ fun AppCell(
         tag = tag,
         style = style,
         iconSize = iconSize,
+        notificationCount = notificationCount,
         modifier = modifier
             .onGloballyPositioned { coords.value = it }
             .then(dragModifier)
@@ -466,6 +492,7 @@ private fun Dock(
     geometry: HomeGeometry,
     actions: HomeActions,
     highlight: Int?,
+    notifications: Map<String, Int> = emptyMap(),
 ) {
     val colors = Pantheon.colors
     val showEmpty = actions.editMode || drag.active != null
@@ -502,6 +529,7 @@ private fun Dock(
                         source = DragSource.Dock(slot),
                         actions = actions,
                         drag = drag,
+                        notificationCount = notifications[entry.packageName] ?: 0,
                     )
                 } else if (showEmpty) {
                     TText("[+]", color = colors.textDim, size = 12.sp)
@@ -528,7 +556,12 @@ private fun PageIndicator(current: Int, count: Int) {
 
 /** The floating copy of an item under the finger while dragging. */
 @Composable
-fun DragGhost(drag: DragController, tags: Map<String, String>, settings: Settings) {
+fun DragGhost(
+    drag: DragController,
+    tags: Map<String, String>,
+    settings: Settings,
+    notifications: Map<String, Int> = emptyMap(),
+) {
     val active = drag.active ?: return
     val density = LocalDensity.current
     val colors = Pantheon.colors
@@ -556,6 +589,7 @@ fun DragGhost(drag: DragController, tags: Map<String, String>, settings: Setting
         tag = tags[entry.key].orEmpty(),
         style = style,
         iconSize = if (active.source is DragSource.Dock) 28.dp else 30.dp,
+        notificationCount = notifications[entry.packageName] ?: 0,
         modifier = modifier,
     )
 }

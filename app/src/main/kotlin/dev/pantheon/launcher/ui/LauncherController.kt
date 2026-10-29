@@ -70,6 +70,7 @@ class LauncherController(
     override var editMode by mutableStateOf(false)
         private set
     var renaming by mutableStateOf<AppEntry?>(null)
+    var pickingIconFor by mutableStateOf<AppEntry?>(null)
 
     /** Where a widget picked from the picker goes; null when the picker is closed. */
     var pickingWidget by mutableStateOf<WidgetTarget?>(null)
@@ -102,7 +103,7 @@ class LauncherController(
                 buildList {
                     add(MenuItem("open") { launch(entry, bounds) })
                     add(MenuItem("rename tag") { renaming = entry })
-                    add(MenuItem("change icon", enabled = false, hint = "stage 4"))
+                    add(MenuItem("change icon") { pickingIconFor = entry })
                     add(MenuItem("app info") { c.apps.openAppInfo(entry, null) })
                     add(hideItem(entry))
                     when (source) {
@@ -124,7 +125,7 @@ class LauncherController(
                     MenuItem("add to home") { addToHome(entry) },
                     MenuItem("add to dock") { addToDock(entry) },
                     MenuItem("rename tag") { renaming = entry },
-                    MenuItem("change icon", enabled = false, hint = "stage 4"),
+                    MenuItem("change icon") { pickingIconFor = entry },
                     MenuItem("app info") { c.apps.openAppInfo(entry, null) },
                     hideItem(entry),
                     MenuItem("uninstall") { Actions.uninstall(context, entry, c.apps.userFor(entry)) },
@@ -164,6 +165,18 @@ class LauncherController(
         renaming = null
     }
 
+    fun setIconOverride(entry: AppEntry, spec: String) {
+        updateSettings { s -> s.copy(iconOverrides = s.iconOverrides + (entry.key to spec)) }
+        pickingIconFor = null
+        toast.show("icon changed: ${entry.label.lowercase()}")
+    }
+
+    fun resetIconOverride(entry: AppEntry) {
+        updateSettings { s -> s.copy(iconOverrides = s.iconOverrides - entry.key) }
+        pickingIconFor = null
+        toast.show("icon reset: ${entry.label.lowercase()}")
+    }
+
     // ── home menu ─────────────────────────────────────────
 
     override fun emptyLongPress(at: Offset) {
@@ -179,12 +192,52 @@ class LauncherController(
                     MenuItem("add widget", hint = "›") { pickingWidget = target },
                     MenuItem("add image") { addImageWidget(target) },
                     MenuItem("pages", hint = "›") { pagesMenu(anchor) },
+                    MenuItem("icon pack", hint = "›") { iconPackMenu(anchor) },
                     MenuItem("theme", hint = "›") { themeMenu(anchor) },
                     MenuItem("accent", hint = "›") { accentMenu(anchor) },
+                    MenuItem("notification counts") { openNotificationSettings() },
                     MenuItem("settings", enabled = false, hint = "stage 5"),
                 ),
             ),
         )
+    }
+
+    private fun iconPackMenu(anchor: Rect) {
+        val packs = c.iconPacks.getInstalledPacks()
+        menu.show(
+            MenuSpec(
+                anchor,
+                "icon pack",
+                buildList {
+                    add(
+                        MenuItem("default", hint = if (settings.iconPack == null) "●" else null) {
+                            updateSettings { it.copy(iconPack = null) }
+                            toast.show("icon pack: default")
+                        },
+                    )
+                    for (p in packs) {
+                        add(
+                            MenuItem(p.label.lowercase(), hint = if (settings.iconPack == p.packageName) "●" else null) {
+                                updateSettings { it.copy(iconPack = p.packageName) }
+                                toast.show("icon pack: ${p.label.lowercase()}")
+                            },
+                        )
+                    }
+                    if (packs.isEmpty()) {
+                        add(MenuItem("no icon packs installed", enabled = false))
+                    }
+                },
+            ),
+        )
+    }
+
+    private fun openNotificationSettings() {
+        runCatching {
+            context.startActivity(
+                Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
     }
 
     private fun pagesMenu(anchor: Rect) {
@@ -545,10 +598,11 @@ class LauncherController(
     // ── system navigation ─────────────────────────────────
 
     val backEnabled: Boolean
-        get() = renaming != null || menu.spec != null || editMode || drawer.progress > 0f
+        get() = pickingIconFor != null || renaming != null || menu.spec != null || editMode || drawer.progress > 0f
 
     fun onBack() {
         when {
+            pickingIconFor != null -> pickingIconFor = null
             renaming != null -> renaming = null
             menu.spec != null -> menu.dismiss()
             editMode -> editMode = false
@@ -557,7 +611,8 @@ class LauncherController(
     }
 
     suspend fun onHome() {
-        val busy = backEnabled || pickingWidget != null || editingNotes != null
+        val busy = backEnabled || pickingWidget != null || editingNotes != null || pickingIconFor != null
+        pickingIconFor = null
         pickingWidget = null
         editingNotes = null
         renaming = null
@@ -571,6 +626,7 @@ class LauncherController(
     /** Leaving home (another app, or a picker/permission screen we opened) resets transient state. */
     fun onStop() {
         drawer.snapClosed()
+        pickingIconFor = null
         renaming = null
         menu.dismiss()
         dragCancel()

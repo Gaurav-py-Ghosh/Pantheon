@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Pantheon</string>
+    <string name="notification_service_label">Pantheon Notification Listener</string>
 </resources>

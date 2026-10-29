@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -92,6 +93,7 @@ fun DrawerScreen(
     onLaunch: LaunchFn,
     onLongPress: (AppEntry, Rect) -> Unit,
     onToggleMode: () -> Unit,
+    notifications: Map<String, Int> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
     val colors = Pantheon.colors
@@ -199,7 +201,7 @@ fun DrawerScreen(
             val nested = remember(drawer, distancePx) { drawerNestedScroll(drawer, distancePx) }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (query.isBlank()) {
-                    AppList(visible, tags, settings, nested, onLaunch, onLongPress)
+                    AppList(visible, tags, settings, nested, onLaunch, onLongPress, notifications)
                 } else {
                     LazyColumn(
                         Modifier.fillMaxSize().nestedScroll(nested),
@@ -210,6 +212,7 @@ fun DrawerScreen(
                                 hit = hit,
                                 tags = tags,
                                 hidden = settings.hidden,
+                                notifications = notifications,
                                 onClick = { b -> activate(hit, b) },
                                 onLongClick = (hit as? Hit.App)?.let { h -> { b: Rect -> onLongPress(h.entry, b) } },
                             )
@@ -279,6 +282,7 @@ private fun AppList(
     nested: NestedScrollConnection,
     onLaunch: LaunchFn,
     onLongPress: (AppEntry, Rect) -> Unit,
+    notifications: Map<String, Int> = emptyMap(),
 ) {
     val colors = Pantheon.colors
     val mode = settings.drawerMode
@@ -312,6 +316,7 @@ private fun AppList(
                         hit = Hit.App(entry),
                         tags = tags,
                         hidden = settings.hidden,
+                        notifications = notifications,
                         onClick = { b -> onLaunch(entry, b) },
                         onLongClick = { b -> onLongPress(entry, b) },
                     )
@@ -400,6 +405,7 @@ private fun HitRow(
     hidden: Set<String>,
     onClick: (Rect?) -> Unit,
     onLongClick: ((Rect) -> Unit)? = null,
+    notifications: Map<String, Int> = emptyMap(),
 ) {
     val colors = Pantheon.colors
     val bounds = remember { BoundsHolder() }
@@ -424,9 +430,16 @@ private fun HitRow(
         when (hit) {
             is Hit.App -> {
                 val entry = hit.entry
+                val notif = notifications[entry.packageName] ?: 0
+                val rawTag = tags[entry.key].orEmpty()
+                val displayTag = if (notif > 0) {
+                    if (rawTag.isNotEmpty()) "$rawTag:$notif" else "$notif"
+                } else {
+                    rawTag
+                }
                 AppIconImage(entry, 22.dp)
                 Spacer(Modifier.width(12.dp))
-                TText("[${tags[entry.key].orEmpty()}]", color = colors.accent, size = 12.sp, glow = true, modifier = Modifier.width(64.dp))
+                TText("[$displayTag]", color = colors.accent, size = 12.sp, glow = true, modifier = Modifier.widthIn(min = 64.dp).padding(end = 6.dp))
                 TText(entry.label.lowercase(), size = 14.sp, modifier = Modifier.weight(1f))
                 if (entry.isWork) TText(" [w]", color = colors.textDim, size = 11.sp)
                 if (entry.key in hidden) TText(" [h]", color = colors.textDim, size = 11.sp)

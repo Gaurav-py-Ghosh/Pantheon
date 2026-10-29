@@ -35,6 +35,10 @@ data class Settings(
     val glow: Boolean = true,
     /** Default fill (crop) vs fit for new photo and image widgets. */
     val imageFill: Boolean = true,
+    /** Package name of the active icon pack, or null for default. */
+    val iconPack: String? = null,
+    /** App key to icon specifier (`line:res_name` or `pack:pkg/drawable_name`). */
+    val iconOverrides: Map<String, String> = emptyMap(),
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -53,6 +57,8 @@ class SettingsRepository(private val context: Context) {
         val drawerMode = stringPreferencesKey("drawer_mode")
         val glow = booleanPreferencesKey("glow")
         val imageFill = booleanPreferencesKey("image_fill")
+        val iconPack = stringPreferencesKey("icon_pack")
+        val iconOverrides = stringPreferencesKey("icon_overrides")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map(::read).distinctUntilChanged()
@@ -76,6 +82,8 @@ class SettingsRepository(private val context: Context) {
             drawerMode = enumOr(p[K.drawerMode], d.drawerMode),
             glow = p[K.glow] ?: d.glow,
             imageFill = p[K.imageFill] ?: d.imageFill,
+            iconPack = p[K.iconPack],
+            iconOverrides = p[K.iconOverrides]?.let { runCatching { Json.decodeFromString<Map<String, String>>(it) }.getOrNull() } ?: d.iconOverrides,
         )
     }
 
@@ -92,6 +100,8 @@ class SettingsRepository(private val context: Context) {
         p[K.drawerMode] = s.drawerMode.name
         p[K.glow] = s.glow
         p[K.imageFill] = s.imageFill
+        if (s.iconPack != null) p[K.iconPack] = s.iconPack else p.remove(K.iconPack)
+        p[K.iconOverrides] = Json.encodeToString(s.iconOverrides)
     }
 }
 

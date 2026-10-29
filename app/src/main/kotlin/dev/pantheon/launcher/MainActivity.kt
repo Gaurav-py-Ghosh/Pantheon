@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         runCatching { container.widgets.host.startListening() }
+        dev.pantheon.launcher.notifications.PantheonNotificationListener.refresh(this)
     }
 
     override fun onStop() {

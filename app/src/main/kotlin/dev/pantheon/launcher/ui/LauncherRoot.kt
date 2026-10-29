@@ -27,6 +27,7 @@ import dev.pantheon.launcher.container
 import dev.pantheon.launcher.data.DrawerMode
 import dev.pantheon.launcher.data.Settings
 import dev.pantheon.launcher.ui.drawer.DrawerScreen
+import dev.pantheon.launcher.ui.edit.IconPicker
 import dev.pantheon.launcher.ui.edit.MenuOverlay
 import dev.pantheon.launcher.ui.edit.RenamePrompt
 import dev.pantheon.launcher.ui.edit.ToastHost
@@ -49,6 +50,7 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
 
     val apps by c.apps.apps.collectAsStateWithLifecycle()
     val layoutState = c.layout.layout.collectAsStateWithLifecycle()
+    val notifications by c.notifications.collectAsStateWithLifecycle()
     val byKey = remember(apps) { apps.associateBy { it.key } }
     val tags = remember(apps, settings.tags) { apps.associate { it.key to c.tags.tagFor(it, settings.tags) } }
 
@@ -94,6 +96,7 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                     geometry = launcher.geometry,
                     actions = launcher,
                     onSearch = { drawer.open(focus = true) },
+                    notifications = notifications,
                     modifier = Modifier.graphicsLayer {
                         val p = drawer.progress
                         alpha = 1f - p
@@ -120,6 +123,7 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                             }
                         }
                     },
+                    notifications = notifications,
                     modifier = Modifier.graphicsLayer {
                         val p = drawer.progress
                         alpha = p
@@ -129,7 +133,7 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
             }
         }
 
-        DragGhost(launcher.drag, tags, settings)
+        DragGhost(launcher.drag, tags, settings, notifications)
         ToastHost(launcher.toast, Modifier.align(Alignment.BottomCenter))
         MenuOverlay(launcher.menu)
         if (launcher.pickingWidget != null) {
@@ -137,6 +141,15 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                 onBuiltin = launcher::addBuiltin,
                 onProvider = launcher::addAppWidget,
                 onDismiss = { launcher.pickingWidget = null },
+            )
+        }
+        launcher.pickingIconFor?.let { entry ->
+            IconPicker(
+                entry = entry,
+                activePack = settings.iconPack,
+                onPick = { spec -> launcher.setIconOverride(entry, spec) },
+                onReset = { launcher.resetIconOverride(entry) },
+                onDismiss = { launcher.pickingIconFor = null },
             )
         }
         launcher.editingNotes?.let { id -> NotesEditor(id, onClose = { launcher.editingNotes = null }) }

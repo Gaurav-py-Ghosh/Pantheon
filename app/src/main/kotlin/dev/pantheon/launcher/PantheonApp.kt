@@ -5,14 +5,16 @@ import android.content.Context
 import dev.pantheon.launcher.data.AppRepository
 import dev.pantheon.launcher.data.CalendarRepository
 import dev.pantheon.launcher.data.IconCache
+import dev.pantheon.launcher.data.IconPackManager
 import dev.pantheon.launcher.data.LayoutRepository
 import dev.pantheon.launcher.data.MediaRepository
 import dev.pantheon.launcher.data.NotesRepository
-import dev.pantheon.launcher.data.WidgetHostRepository
 import dev.pantheon.launcher.data.SettingsRepository
 import dev.pantheon.launcher.data.SystemStats
 import dev.pantheon.launcher.data.TagResolver
 import dev.pantheon.launcher.data.Torch
+import dev.pantheon.launcher.data.WidgetHostRepository
+import dev.pantheon.launcher.notifications.PantheonNotificationListener
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,7 +37,8 @@ class PantheonApp : Application() {
 class AppContainer(app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val settings = SettingsRepository(app)
-    val icons = IconCache(app)
+    val iconPacks = IconPackManager(app)
+    val icons = IconCache(app, settings, iconPacks, scope)
     val apps = AppRepository(app, scope, onPackageChanged = icons::evictPackage)
     val layout = LayoutRepository(app, scope)
     val stats = SystemStats(app)
@@ -45,6 +48,7 @@ class AppContainer(app: Application) {
     val calendar = CalendarRepository(app)
     val notes = NotesRepository(app, scope)
     val widgets = WidgetHostRepository(app)
+    val notifications = PantheonNotificationListener.counts
 
     init {
         scope.launch(Dispatchers.IO) {
@@ -52,6 +56,7 @@ class AppContainer(app: Application) {
             val (apps, layout) = combine(apps.apps, layout.layout.filterNotNull(), ::Pair)
                 .first { (a, l) -> l.seeded || a.isNotEmpty() }
             if (!layout.seeded) this@AppContainer.layout.seed(apps)
+            PantheonNotificationListener.refresh(app)
         }
     }
 }
