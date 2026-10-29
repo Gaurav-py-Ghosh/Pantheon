@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -21,8 +23,10 @@ import dev.pantheon.launcher.ui.theme.Pantheon
 @Composable
 fun AppIconImage(entry: AppEntry, size: Dp, modifier: Modifier = Modifier) {
     val icons = LocalContext.current.container.icons
-    val icon by produceState(icons.peek(entry.key), entry.key) {
-        if (value == null) value = icons.load(entry)
+    // Keyed on the app so a slot that changes app never keeps showing the previous icon.
+    var icon by remember(entry.key) { mutableStateOf(icons.peek(entry.key)) }
+    LaunchedEffect(entry.key) {
+        if (icon == null) icon = icons.load(entry)
     }
     val tint = Pantheon.colors.text
     Box(modifier.size(size)) {

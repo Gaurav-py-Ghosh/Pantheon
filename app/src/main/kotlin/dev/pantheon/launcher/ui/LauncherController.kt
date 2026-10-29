@@ -252,9 +252,10 @@ class LauncherController(
 
     // ── drag and drop ─────────────────────────────────────
 
-    override fun dragStart(entry: AppEntry, source: DragSource, bounds: Rect, finger: Offset) {
+    override fun dragStart(entry: AppEntry, source: DragSource, bounds: Rect, finger: Offset, grabbedAt: Offset) {
         menu.dismiss()
-        drag.start(ActiveDrag(source, entry, finger - bounds.topLeft, bounds.size), finger)
+        // Anchor to the touch-down point so the ghost keeps the spot that was grabbed under the finger.
+        drag.start(ActiveDrag(source, entry, grabbedAt - bounds.topLeft, bounds.size), finger)
     }
 
     override fun dragMove(finger: Offset) = drag.move(finger)

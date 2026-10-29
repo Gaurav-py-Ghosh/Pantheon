@@ -13,7 +13,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.LayoutCoordinates
 import dev.pantheon.launcher.data.AppEntry
 import dev.pantheon.launcher.data.DragSource
@@ -107,7 +106,8 @@ class CoordsHolder {
 fun rememberItemDrag(
     isArmed: () -> Boolean,
     coordinates: () -> LayoutCoordinates?,
-    onStart: (Offset) -> Unit,
+    /** (finger, grabbedAt): current finger and where it first touched down, both in window coordinates. */
+    onStart: (Offset, Offset) -> Unit,
     onMove: (Offset) -> Unit,
     onEnd: () -> Unit,
     onCancel: () -> Unit,
@@ -141,14 +141,17 @@ fun rememberItemDrag(
                     if (change.isConsumed) break
                     continue
                 }
-                travelled += change.positionChange().getDistance()
+                // Raw delta: after a long-press the click handler already consumed the move,
+                // and positionChange() reports zero for consumed changes.
+                travelled += (change.position - change.previousPosition).getDistance()
                 change.consume()
-                val window = coords()?.takeIf { it.isAttached }?.localToWindow(change.position) ?: continue
+                val layout = coords()?.takeIf { it.isAttached } ?: continue
+                val window = layout.localToWindow(change.position)
                 if (dragging) {
                     move(window)
                 } else if (travelled > viewConfiguration.touchSlop) {
                     dragging = true
-                    start(window)
+                    start(window, layout.localToWindow(down.position))
                 }
             }
             if (dragging && !released) cancel()

@@ -81,7 +81,7 @@ interface HomeActions {
     fun launch(entry: AppEntry, bounds: Rect?)
     fun appLongPress(entry: AppEntry, source: DragSource, bounds: Rect)
     fun emptyLongPress(at: Offset)
-    fun dragStart(entry: AppEntry, source: DragSource, bounds: Rect, finger: Offset)
+    fun dragStart(entry: AppEntry, source: DragSource, bounds: Rect, finger: Offset, grabbedAt: Offset)
     fun dragMove(finger: Offset)
     fun dragEnd()
     fun dragCancel()
@@ -342,7 +342,7 @@ fun AppCell(
     val dragModifier = rememberItemDrag(
         isArmed = { actions.editMode || drag.armed == source },
         coordinates = { coords.value },
-        onStart = { finger -> coords.bounds()?.let { actions.dragStart(entry, source, it, finger) } },
+        onStart = { finger, grabbedAt -> coords.bounds()?.let { actions.dragStart(entry, source, it, finger, grabbedAt) } },
         onMove = actions::dragMove,
         onEnd = actions::dragEnd,
         onCancel = actions::dragCancel,

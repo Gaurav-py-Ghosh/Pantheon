@@ -9,7 +9,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.pantheon.launcher.ui.LauncherRoot
 import dev.pantheon.launcher.ui.theme.Pantheon
@@ -46,10 +45,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var hasFocus = false
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        this.hasFocus = hasFocus
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         // Home pressed while already on home: close the drawer or go back to page one.
+        // The activity is paused before this call, so check focus and "brought to front" (as Launcher3 does).
         val isHome = intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_HOME)
-        if (isHome && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) homePresses.tryEmit(Unit)
+        val broughtToFront = intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT != 0
+        if (isHome && hasFocus && !broughtToFront) homePresses.tryEmit(Unit)
     }
 }
