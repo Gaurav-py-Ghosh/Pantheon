@@ -129,13 +129,13 @@ fun BootScreen(onComplete: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TText("$", color = colors.textDim, size = 15.sp)
-                    TText(" setup --init", color = colors.accent, size = 15.sp, glow = true)
+                    TText("$", color = colors.textDim, size = 15.sp, maxLines = 6)
+                    TText(" setup --init", color = colors.accent, size = 15.sp, maxLines = 6, glow = true)
                 }
                 TText(
                     "[skip all]",
                     color = colors.textDim,
-                    size = 12.sp,
+                    size = 12.sp, maxLines = 6,
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
                         .clickable(onClick = onComplete)
@@ -151,10 +151,10 @@ fun BootScreen(onComplete: () -> Unit) {
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                TText("PANTHEON v0.1.0 (x86_64)", color = colors.accent, size = 11.sp, glow = true)
-                TText("Linux 6.6-android #1 PREEMPT SMP", color = colors.textDim, size = 11.sp)
-                TText("Mounting root filesystem ... [OK]", color = colors.textDim, size = 11.sp)
-                TText("Initializing configuration wizard ... [OK]", color = colors.textDim, size = 11.sp)
+                TText("PANTHEON v0.1.0 (x86_64)", color = colors.accent, size = 11.sp, maxLines = 6, glow = true)
+                TText("Linux 6.6-android #1 PREEMPT SMP", color = colors.textDim, size = 11.sp, maxLines = 6)
+                TText("Mounting root filesystem ... [OK]", color = colors.textDim, size = 11.sp, maxLines = 6)
+                TText("Initializing configuration wizard ... [OK]", color = colors.textDim, size = 11.sp, maxLines = 6)
             }
 
             // Step Content
@@ -237,7 +237,7 @@ fun BootScreen(onComplete: () -> Unit) {
                     TText(
                         "‹ prev",
                         color = colors.textDim,
-                        size = 13.sp,
+                        size = 13.sp, maxLines = 6,
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .clickable { currentStep-- }
@@ -251,7 +251,7 @@ fun BootScreen(onComplete: () -> Unit) {
                     TText(
                         "next ›",
                         color = colors.accent,
-                        size = 13.sp,
+                        size = 13.sp, maxLines = 6,
                         glow = true,
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -288,16 +288,16 @@ private fun StepCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TText("── STEP $stepNumber: $title", color = colors.accent, size = 12.sp, glow = true)
+            TText("── STEP $stepNumber: $title", color = colors.accent, size = 12.sp, maxLines = 6, glow = true)
             TText(
                 if (isGranted) "[GRANTED]" else "[NOT SET]",
                 color = if (isGranted) colors.accent else colors.textDim,
-                size = 11.sp,
+                size = 11.sp, maxLines = 6,
                 glow = isGranted,
             )
         }
 
-        TText(description, color = colors.text, size = 12.sp)
+        TText(description, color = colors.text, size = 12.sp, maxLines = 6)
 
         Spacer(Modifier.height(4.dp))
 
@@ -309,7 +309,7 @@ private fun StepCard(
             TText(
                 "[skip]",
                 color = colors.textDim,
-                size = 13.sp,
+                size = 13.sp, maxLines = 6,
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .clickable(onClick = onNext)
@@ -319,7 +319,7 @@ private fun StepCard(
             TText(
                 if (isGranted) "[configured]" else "[grant]",
                 color = if (isGranted) colors.textDim else colors.accent,
-                size = 13.sp,
+                size = 13.sp, maxLines = 6,
                 glow = !isGranted,
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
@@ -340,11 +340,11 @@ private fun FinishedCard(onLaunch: () -> Unit) {
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        TText("── SETUP COMPLETE", color = colors.accent, size = 12.sp, glow = true)
+        TText("── SETUP COMPLETE", color = colors.accent, size = 12.sp, maxLines = 6, glow = true)
         TText(
             "All initial configuration steps have been processed.\nYou can fine-tune preferences at any time by editing ~/.pantheonrc from the home menu.",
             color = colors.text,
-            size = 12.sp,
+            size = 12.sp, maxLines = 6,
         )
 
         Spacer(Modifier.height(8.dp))
@@ -353,7 +353,7 @@ private fun FinishedCard(onLaunch: () -> Unit) {
             TText(
                 "[ launch pantheon ]",
                 color = colors.accent,
-                size = 14.sp,
+                size = 14.sp, maxLines = 6,
                 glow = true,
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))

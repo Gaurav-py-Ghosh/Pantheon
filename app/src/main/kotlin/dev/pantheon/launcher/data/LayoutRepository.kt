@@ -87,6 +87,10 @@ sealed interface ItemContent {
     @SerialName("notes")
     data class Notes(val frame: Boolean = true) : ItemContent
 
+    @Serializable
+    @SerialName("pet")
+    data class Pet(val frame: Boolean = false) : ItemContent
+
     /** A real Android widget hosted through AppWidgetHost. */
     @Serializable
     @SerialName("appwidget")
@@ -102,6 +106,7 @@ val ItemContent.hasFrame: Boolean
         is ItemContent.Sysmon -> frame
         is ItemContent.Agenda -> frame
         is ItemContent.Notes -> frame
+        is ItemContent.Pet -> frame
         is ItemContent.AppWidget -> frame
     }
 
@@ -113,6 +118,7 @@ fun ItemContent.withFrame(on: Boolean): ItemContent = when (this) {
     is ItemContent.Sysmon -> copy(frame = on)
     is ItemContent.Agenda -> copy(frame = on)
     is ItemContent.Notes -> copy(frame = on)
+    is ItemContent.Pet -> copy(frame = on)
     is ItemContent.AppWidget -> copy(frame = on)
 }
 

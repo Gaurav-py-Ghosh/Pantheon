@@ -1,5 +1,19 @@
 package dev.pantheon.launcher.ui.home
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.pantheon.launcher.container
+import dev.pantheon.launcher.ui.components.TerminalPet
+import kotlinx.coroutines.delay
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -19,7 +33,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -141,11 +154,15 @@ fun HomeScreen(
     Column(
         modifier
             .fillMaxSize()
-            .systemBarsPadding()
-            .displayCutoutPadding()
+            .then(if (settings.hideStatusBar) Modifier.navigationBarsPadding() else Modifier.systemBarsPadding())
             .padding(horizontal = 16.dp),
     ) {
-        Spacer(Modifier.height(10.dp))
+        if (settings.hideStatusBar) {
+            TopStrip(showPet = settings.pet)
+            Spacer(Modifier.height(4.dp))
+        } else {
+            Spacer(Modifier.height(10.dp))
+        }
         if (actions.editMode) EditBar(actions) else StatusLine(typewriter = settings.typewriter, onClick = onOpenSysinfo)
         Spacer(Modifier.height(12.dp))
         SearchStub(onSearch)
@@ -179,6 +196,49 @@ fun HomeScreen(
         Spacer(Modifier.height(10.dp))
         Dock(layout, apps, tags, settings, drag, geometry, actions, highlight = (target as? DropTarget.DockSlot)?.index, notifications = notifications)
         Spacer(Modifier.height(10.dp))
+    }
+}
+
+/**
+ * Fills the space the hidden status bar leaves at the top (it's as tall as the bar and camera
+ * cutout): time on the left, battery on the right, and the pet wandering in between.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TopStrip(showPet: Boolean) {
+    val context = LocalContext.current
+    val colors = Pantheon.colors
+    val stats = context.container.stats
+    val snap by remember(stats) { stats.snapshots }.collectAsStateWithLifecycle(initialValue = null)
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(60_000 - now % 60_000)
+        }
+    }
+    val is24 = android.text.format.DateFormat.is24HourFormat(context)
+    val time = remember(now / 60_000, is24) {
+        java.text.SimpleDateFormat(if (is24) "HH:mm" else "h:mm", java.util.Locale.getDefault()).format(java.util.Date(now))
+    }
+    val top = maxOf(
+        WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding(),
+        WindowInsets.displayCutout.asPaddingValues().calculateTopPadding(),
+        24.dp,
+    )
+    Row(Modifier.fillMaxWidth().height(top), verticalAlignment = Alignment.CenterVertically) {
+        TText(time, size = 12.sp)
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .padding(horizontal = 10.dp, vertical = 2.dp),
+        ) {
+            if (showPet) TerminalPet(Modifier.fillMaxSize())
+        }
+        snap?.let { s ->
+            TText((if (s.charging) "+" else "") + "${s.battery}%", color = if (s.battery <= 15) colors.warn else colors.text, size = 12.sp)
+        }
     }
 }
 
@@ -254,6 +314,8 @@ private fun HomeGrid(
 ) {
     val colors = Pantheon.colors
     val currentActions by rememberUpdatedState(actions)
+    val currentPage by rememberUpdatedState(page)
+    val currentColumns by rememberUpdatedState(columns)
     val coords = remember { CoordsHolder() }
     var resizing by remember { mutableStateOf<ResizePreview?>(null) }
     BoxWithConstraints(
@@ -261,11 +323,18 @@ private fun HomeGrid(
             .fillMaxSize()
             .onGloballyPositioned { coords.value = it }
             .pointerInput(Unit) {
+                // Widgets don't consume the press, so without this check a long-press on a widget
+                // also opened the home menu here, replacing the widget's own menu (and its "remove").
+                fun onItem(offset: Offset): Boolean {
+                    val x = (offset.x / (size.width.toFloat() / currentColumns)).toInt()
+                    val y = (offset.y / cellH.toPx()).toInt()
+                    return currentPage.items.any { x in it.x until it.x + it.w && y in it.y until it.y + it.h }
+                }
                 detectTapGestures(
-                    onDoubleTap = { currentActions.onDoubleTap() },
+                    onDoubleTap = { offset -> if (!onItem(offset)) currentActions.onDoubleTap() },
                     onLongPress = { offset ->
                         val c = coords.value?.takeIf { it.isAttached } ?: return@detectTapGestures
-                        if (!currentActions.editMode) currentActions.emptyLongPress(c.localToWindow(offset))
+                        if (!currentActions.editMode && !onItem(offset)) currentActions.emptyLongPress(c.localToWindow(offset))
                     },
                 )
             },

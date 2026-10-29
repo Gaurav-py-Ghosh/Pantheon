@@ -112,7 +112,10 @@ fun SysmonWidget() {
     val snap by remember(stats) { stats.snapshots }.collectAsStateWithLifecycle(initialValue = null)
     val colors = Pantheon.colors
     BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        val chars = ((maxWidth.value - 120f) / 7.3f).toInt().coerceIn(6, 32)
+        // Narrow (2 columns): percentages instead of used/total so values don't get cut off.
+        val compact = maxWidth < 240.dp
+        val valueChars = if (compact) 5 else 11
+        val chars = ((maxWidth.value / 7.3f).toInt() - 6 - valueChars).coerceIn(4, 32)
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             TText("$ htop --lite", color = colors.textDim, size = 11.sp)
             val s = snap
@@ -120,16 +123,17 @@ fun SysmonWidget() {
                 TText("sampling…", color = colors.textDim, size = 12.sp)
                 return@Column
             }
-            Meter("MEM", s.memUsed.toFloat() / s.memTotal, "${gb(s.memUsed)}/${gb(s.memTotal)}", chars)
-            Meter("STO", s.storageUsed.toFloat() / s.storageTotal, "${gb(s.storageUsed)}/${gb(s.storageTotal)}", chars)
+            fun amount(used: Long, total: Long) = if (compact) "${(used * 100 / total.coerceAtLeast(1))}%" else "${gb(used)}/${gb(total)}"
+            Meter("MEM", s.memUsed.toFloat() / s.memTotal, amount(s.memUsed, s.memTotal), chars)
+            Meter("STO", s.storageUsed.toFloat() / s.storageTotal, amount(s.storageUsed, s.storageTotal), chars)
             Meter(if (s.charging) "CHG" else "BAT", s.battery / 100f, "${s.battery}%", chars, invert = true)
             TText(
                 buildAnnotatedString {
                     withStyle(SpanStyle(color = colors.textDim)) { append("NET ") }
                     withStyle(SpanStyle(color = colors.accent)) { append("↓") }
-                    append(rate(s.rxBitsPerSec) + "  ")
+                    append(rate(s.rxBitsPerSec).let { if (compact) it.removeSuffix("b/s") else it } + if (compact) " " else "  ")
                     withStyle(SpanStyle(color = colors.accent)) { append("↑") }
-                    append(rate(s.txBitsPerSec))
+                    append(rate(s.txBitsPerSec).let { if (compact) it.removeSuffix("b/s") else it })
                 },
                 size = 12.sp,
             )

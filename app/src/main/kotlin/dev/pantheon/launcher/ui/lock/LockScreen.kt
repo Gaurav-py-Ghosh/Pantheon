@@ -90,13 +90,12 @@ fun LockScreen(
     var granted by remember { mutableStateOf(false) }
     val glitchAlpha = remember { Animatable(1f) }
 
-    LaunchedEffect(colors.accent) {
-        val targetWidth = 1080
-        ditherBitmap = DitherFilter.loadDitheredCreationOfAdam(
-            context = context,
-            fgColor = colors.accent.toArgb(),
-            targetWidth = targetWidth,
-        )
+    LaunchedEffect(colors.accent, settings.lockArt) {
+        ditherBitmap = if (settings.lockArt == "none") {
+            null
+        } else {
+            DitherFilter.loadDithered(context, settings.lockArt, colors.accent.toArgb(), targetWidth = 1080)
+        }
     }
 
     fun triggerUnlock() {
@@ -233,13 +232,13 @@ fun LockScreen(
                     ) {
                         Image(
                             bitmap = bmp,
-                            contentDescription = "Creation of Adam dithered art",
+                            contentDescription = "lock screen art",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
                         )
                         // Soft overlay text
                         TText(
-                            "~ every project begins with a touch",
+                            if (settings.lockArt == "adam") "~ every project begins with a touch" else "~/img/lock",
                             color = colors.textDim.copy(alpha = 0.7f),
                             size = 10.sp,
                             modifier = Modifier

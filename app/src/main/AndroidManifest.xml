@@ -48,7 +48,6 @@
             android:name=".ui.lock.LockScreenActivity"
             android:exported="true"
             android:showWhenLocked="true"
-            android:turnScreenOn="true"
             android:inheritShowWhenLocked="true"
             android:excludeFromRecents="true"
             android:launchMode="singleInstance"

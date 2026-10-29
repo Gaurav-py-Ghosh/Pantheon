@@ -28,7 +28,6 @@ import dev.pantheon.launcher.ui.theme.Pantheon
 @Composable
 fun AppIconImage(entry: AppEntry, size: Dp, modifier: Modifier = Modifier) {
     val icons = LocalContext.current.container.icons
-    val tags = LocalContext.current.container.tags
     // Keyed on the app and icon version so changes invalidate immediately.
     var icon by remember(entry.key, icons.version) { mutableStateOf(icons.peek(entry.key)) }
     LaunchedEffect(entry.key, icons.version) {
@@ -44,14 +43,16 @@ fun AppIconImage(entry: AppEntry, size: Dp, modifier: Modifier = Modifier) {
                 }
                 Image(ic.bitmap, contentDescription = entry.label, modifier = Modifier.fillMaxSize(), colorFilter = filter)
             } else {
-                val tag = remember(entry) { tags.tagFor(entry, emptyMap()) }
+                // No icon anywhere: a boxed initial. (It used to repeat the [tag], which the label
+                // under the icon already shows, so the same tag appeared twice.)
+                val initial = remember(entry.label) { entry.label.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?" }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .border(1.dp, Pantheon.colors.border, RoundedCornerShape(4.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    TText("[$tag]", color = Pantheon.colors.accent, size = (size.value * 0.28f).sp, glow = true)
+                    TText(initial, color = Pantheon.colors.text, size = (size.value * 0.5f).sp)
                 }
             }
         }

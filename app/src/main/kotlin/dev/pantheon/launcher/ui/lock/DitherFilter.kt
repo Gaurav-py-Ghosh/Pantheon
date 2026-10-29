@@ -27,16 +27,22 @@ object DitherFilter {
     private var cachedKey: String? = null
     private var cachedBitmap: ImageBitmap? = null
 
-    suspend fun loadDitheredCreationOfAdam(
+    /** [art] is `adam` for the bundled Creation of Adam, or an image file name under files/images. */
+    suspend fun loadDithered(
         context: Context,
+        art: String,
         fgColor: Int,
         targetWidth: Int = 1080,
     ): ImageBitmap? = withContext(Dispatchers.Default) {
-        val cacheKey = "$fgColor-$targetWidth"
+        val cacheKey = "$art-$fgColor-$targetWidth"
         cachedBitmap?.takeIf { cachedKey == cacheKey }?.let { return@withContext it }
 
         val raw = runCatching {
-            context.assets.open("art/hands-touch.jpg").use { BitmapFactory.decodeStream(it) }
+            if (art == "adam") {
+                context.assets.open("art/hands-touch.jpg").use { BitmapFactory.decodeStream(it) }
+            } else {
+                BitmapFactory.decodeFile(java.io.File(context.filesDir, "images/$art").path)
+            }
         }.getOrNull() ?: return@withContext null
 
         val scale = targetWidth.toFloat() / raw.width

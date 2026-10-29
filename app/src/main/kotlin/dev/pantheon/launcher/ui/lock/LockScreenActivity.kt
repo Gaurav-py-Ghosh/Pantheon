@@ -2,7 +2,6 @@ package dev.pantheon.launcher.ui.lock
 
 import android.app.KeyguardManager
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
@@ -21,9 +20,9 @@ class LockScreenActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(null)
+        // Shown over the keyguard when the user wakes the phone. It must never turn the screen on
+        // or hold it on: it is started at screen-off, so that kept the display awake forever.
         setShowWhenLocked(true)
-        setTurnScreenOn(true)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         // Prevent back press from bypassing keyguard
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -78,6 +79,24 @@ fun SettingsScreen(
     val c = context.container
 
     BackHandler(onBack = onDismiss)
+
+    // Lock screen art: pick an image, copy it into app storage, dither it like the default.
+    val lockArtPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val name = c.media.importImages(listOf(uri)).firstOrNull()
+                if (name == null) {
+                    onToast("couldn't read that image")
+                } else {
+                    onUpdateSettings { it.copy(lockArt = name) }
+                    onToast("lock screen art updated")
+                }
+            }
+        }
+    }
+    val pickLockArt = {
+        lockArtPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
 
     // Backup launchers
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -516,6 +535,19 @@ fun SettingsScreen(
                     checked = settings.lockScreen,
                     onToggle = { onUpdateSettings { s -> s.copy(lockScreen = !s.lockScreen) } },
                 )
+                val artLabel = when (settings.lockArt) {
+                    "adam" -> "creation_of_adam"
+                    "none" -> "none"
+                    else -> "my_image"
+                }
+                val cycleArt = { forward: Boolean ->
+                    val order = listOf("adam", "custom", "none")
+                    val current = when (settings.lockArt) { "adam", "none" -> settings.lockArt else -> "custom" }
+                    val next = order[(order.indexOf(current) + if (forward) 1 else order.size - 1) % order.size]
+                    if (next == "custom") pickLockArt() else onUpdateSettings { it.copy(lockArt = next) }
+                }
+                CycleRow(label = "lock_art", value = artLabel, onPrev = { cycleArt(false) }, onNext = { cycleArt(true) })
+                ActionRow(label = "lock_image", buttonLabel = "[ pick › ]", onClick = pickLockArt)
             }
 
             // [effects]
@@ -524,6 +556,11 @@ fun SettingsScreen(
                     label = "glow",
                     checked = settings.glow,
                     onToggle = { onUpdateSettings { s -> s.copy(glow = !s.glow) } },
+                )
+                ToggleRow(
+                    label = "pet",
+                    checked = settings.pet,
+                    onToggle = { onUpdateSettings { s -> s.copy(pet = !s.pet) } },
                 )
                 ToggleRow(
                     label = "typewriter",

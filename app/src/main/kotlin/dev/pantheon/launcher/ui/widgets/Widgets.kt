@@ -35,6 +35,7 @@ import dev.pantheon.launcher.data.HomeItem
 import dev.pantheon.launcher.data.ItemContent
 import dev.pantheon.launcher.data.hasFrame
 import dev.pantheon.launcher.ui.components.TText
+import dev.pantheon.launcher.ui.components.TerminalPet
 import dev.pantheon.launcher.ui.components.terminalBox
 import dev.pantheon.launcher.ui.edit.CoordsHolder
 import dev.pantheon.launcher.ui.edit.DragController
@@ -50,6 +51,7 @@ enum class WidgetKind(val id: String, val desc: String, val w: Int, val h: Int) 
     SYSMON("sysmon", "mem, storage, battery, net", 4, 2),
     CALENDAR("calendar", "today and tomorrow", 4, 2),
     NOTES("notes", "quick scratchpad", 2, 2),
+    PET("pet", "a pixel cat that lives here", 2, 1),
     ;
 
     fun create(fill: Boolean): ItemContent = when (this) {
@@ -59,6 +61,7 @@ enum class WidgetKind(val id: String, val desc: String, val w: Int, val h: Int) 
         SYSMON -> ItemContent.Sysmon()
         CALENDAR -> ItemContent.Agenda()
         NOTES -> ItemContent.Notes()
+        PET -> ItemContent.Pet()
     }
 }
 
@@ -70,6 +73,7 @@ fun ItemContent.label(): String = when (this) {
     is ItemContent.Sysmon -> "sysmon"
     is ItemContent.Agenda -> "calendar"
     is ItemContent.Notes -> "notes"
+    is ItemContent.Pet -> "pet"
     is ItemContent.AppWidget -> "widget"
 }
 
@@ -180,6 +184,7 @@ fun WidgetItem(
             is ItemContent.Sysmon -> WidgetFrame("~/sysmon", frame) { SysmonWidget() }
             is ItemContent.Agenda -> WidgetFrame("~/calendar", frame) { AgendaWidget(actions) }
             is ItemContent.Notes -> WidgetFrame("~/notes/todo.txt", frame) { NotesWidget(item.id, actions) }
+            is ItemContent.Pet -> WidgetFrame("~/pet", frame) { TerminalPet(Modifier.fillMaxSize().padding(6.dp)) }
             is ItemContent.AppWidget -> HostedWidget(content, width - 8.dp, height - 8.dp)
             is ItemContent.App -> Unit
         }

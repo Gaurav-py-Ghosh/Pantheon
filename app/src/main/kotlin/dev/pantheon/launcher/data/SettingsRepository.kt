@@ -65,6 +65,10 @@ data class Settings(
     val hideStatusBar: Boolean = true,
     /** Terminal lockscreen with dithered Creation of Adam art and biometric auth. */
     val lockScreen: Boolean = true,
+    /** Lock screen art: `adam` (Creation of Adam), `none`, or an imported image file name. */
+    val lockArt: String = "adam",
+    /** The pixel cat in the top strip. */
+    val pet: Boolean = true,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -93,6 +97,8 @@ class SettingsRepository(private val context: Context) {
         val typewriter = booleanPreferencesKey("typewriter")
         val hideStatusBar = booleanPreferencesKey("hide_status_bar")
         val lockScreen = booleanPreferencesKey("lock_screen")
+        val lockArt = stringPreferencesKey("lock_art")
+        val pet = booleanPreferencesKey("pet")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map(::read).distinctUntilChanged()
@@ -130,6 +136,8 @@ class SettingsRepository(private val context: Context) {
             typewriter = p[K.typewriter] ?: d.typewriter,
             hideStatusBar = p[K.hideStatusBar] ?: d.hideStatusBar,
             lockScreen = p[K.lockScreen] ?: d.lockScreen,
+            lockArt = p[K.lockArt] ?: d.lockArt,
+            pet = p[K.pet] ?: d.pet,
         )
     }
 
@@ -156,6 +164,8 @@ class SettingsRepository(private val context: Context) {
         p[K.typewriter] = s.typewriter
         p[K.hideStatusBar] = s.hideStatusBar
         p[K.lockScreen] = s.lockScreen
+        p[K.lockArt] = s.lockArt
+        p[K.pet] = s.pet
     }
 }
 
