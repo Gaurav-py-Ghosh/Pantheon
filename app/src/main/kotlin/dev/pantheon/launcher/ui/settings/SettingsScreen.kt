@@ -277,6 +277,12 @@ fun SettingsScreen(
                         onUpdateSettings { it.copy(backgroundMode = entries[idx]) }
                     },
                 )
+
+                ToggleRow(
+                    label = "hide_status_bar",
+                    checked = settings.hideStatusBar,
+                    onToggle = { onUpdateSettings { s -> s.copy(hideStatusBar = !s.hideStatusBar) } },
+                )
             }
 
             // [grid]
@@ -504,6 +510,11 @@ fun SettingsScreen(
                             }
                         }
                     },
+                )
+                ToggleRow(
+                    label = "lock_screen",
+                    checked = settings.lockScreen,
+                    onToggle = { onUpdateSettings { s -> s.copy(lockScreen = !s.lockScreen) } },
                 )
             }
 

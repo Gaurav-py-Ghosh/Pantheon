@@ -105,8 +105,14 @@ class LauncherController(
 
     override fun onDoubleTap() {
         if (!settings.doubleTapLock) return
+        if (settings.lockScreen) {
+            context.startActivity(
+                Intent(context, dev.pantheon.launcher.ui.lock.LockScreenActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION),
+            )
+        }
         val locked = dev.pantheon.launcher.accessibility.PantheonAccessibilityService.lockScreen()
-        if (!locked) {
+        if (!locked && !settings.lockScreen) {
             toast.show("enable pantheon in accessibility settings to lock")
             runCatching {
                 context.startActivity(

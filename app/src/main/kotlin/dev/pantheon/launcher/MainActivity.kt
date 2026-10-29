@@ -1,6 +1,9 @@
 package dev.pantheon.launcher
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
@@ -11,9 +14,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.pantheon.launcher.accessibility.PantheonAccessibilityService
 import dev.pantheon.launcher.data.BackgroundMode
 import dev.pantheon.launcher.ui.LauncherRoot
+import dev.pantheon.launcher.ui.lock.LockScreenActivity
 import dev.pantheon.launcher.ui.theme.Pantheon
 import dev.pantheon.launcher.ui.theme.PantheonTheme
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -23,9 +31,24 @@ import kotlinx.coroutines.runBlocking
 class MainActivity : ComponentActivity() {
     private val homePresses = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
+    private val screenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                val settings = runBlocking { container.settings.settings.first() }
+                if (settings.lockScreen) {
+                    startActivity(
+                        Intent(this@MainActivity, LockScreenActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                    )
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // stateNotNeeded: never restore saved state, always start clean.
         super.onCreate(null)
+        registerReceiver(screenOffReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
         enableEdgeToEdge()
         val settingsRepo = container.settings
         // One tiny DataStore read so the first frame already has the right theme.
@@ -36,7 +59,8 @@ class MainActivity : ComponentActivity() {
             PantheonTheme(settings) {
                 val dark = Pantheon.colors.isDark
                 val isWallpaper = settings.backgroundMode == BackgroundMode.WALLPAPER
-                LaunchedEffect(dark, isWallpaper) {
+                val hideStatusBar = settings.hideStatusBar
+                LaunchedEffect(dark, isWallpaper, hideStatusBar) {
                     if (isWallpaper) {
                         window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
                         window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
@@ -50,10 +74,23 @@ class MainActivity : ComponentActivity() {
                         SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
                     }
                     enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+
+                    val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                    insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    if (hideStatusBar) {
+                        insetsController.hide(WindowInsetsCompat.Type.statusBars())
+                    } else {
+                        insetsController.show(WindowInsetsCompat.Type.statusBars())
+                    }
                 }
                 LauncherRoot(settings, homePresses)
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        runCatching { unregisterReceiver(screenOffReceiver) }
     }
 
     /** Set by the launcher before starting a widget's setup screen. */
@@ -71,12 +108,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        PantheonAccessibilityService.isPantheonForeground = true
         runCatching { container.widgets.host.startListening() }
         dev.pantheon.launcher.notifications.PantheonNotificationListener.refresh(this)
     }
 
     override fun onStop() {
         super.onStop()
+        PantheonAccessibilityService.isPantheonForeground = false
         runCatching { container.widgets.host.stopListening() }
     }
 

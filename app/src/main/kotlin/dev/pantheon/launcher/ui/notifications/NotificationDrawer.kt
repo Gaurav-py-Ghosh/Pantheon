@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -59,7 +60,8 @@ fun NotificationDrawer(
             .fillMaxSize()
             .background(colors.background.copy(alpha = 0.96f))
             .systemBarsPadding()
-            .padding(16.dp),
+            .displayCutoutPadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         Column(
             Modifier.fillMaxSize(),
@@ -179,6 +181,7 @@ fun NotificationDrawer(
                     .fillMaxWidth()
                     .clickable {
                         drawer.close()
+                        dev.pantheon.launcher.accessibility.PantheonAccessibilityService.allowNativeShadeOnce = true
                         Actions.expandNotifications(context)
                     }
                     .padding(vertical = 4.dp),

@@ -41,6 +41,16 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ui.lock.LockScreenActivity"
+            android:exported="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:inheritShowWhenLocked="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:theme="@style/Theme.Pantheon" />
+
         <service
             android:name=".notifications.PantheonNotificationListener"
             android:label="@string/notification_service_label"

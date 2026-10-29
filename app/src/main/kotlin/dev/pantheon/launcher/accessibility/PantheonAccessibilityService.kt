@@ -12,7 +12,18 @@ class PantheonAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // No event handling required for lock screen or notification actions
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val pkg = event.packageName?.toString()
+            if (pkg == "com.android.systemui" && isPantheonForeground) {
+                if (allowNativeShadeOnce) {
+                    allowNativeShadeOnce = false
+                } else {
+                    // Native shade attempted to open while launcher is active — dismiss and open terminal drawer
+                    performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+                    onInterceptShade?.invoke()
+                }
+            }
+        }
     }
 
     override fun onInterrupt() {
@@ -32,6 +43,15 @@ class PantheonAccessibilityService : AccessibilityService() {
     companion object {
         var instance: PantheonAccessibilityService? = null
             private set
+
+        @Volatile
+        var isPantheonForeground: Boolean = false
+
+        @Volatile
+        var allowNativeShadeOnce: Boolean = false
+
+        @Volatile
+        var onInterceptShade: (() -> Unit)? = null
 
         fun isConnected(): Boolean = instance != null
 

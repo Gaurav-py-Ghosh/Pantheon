@@ -61,6 +61,10 @@ data class Settings(
     val glitch: Boolean = false,
     /** Typewriter effect on status line return. */
     val typewriter: Boolean = true,
+    /** Hide system status bar for full-bleed terminal mode. */
+    val hideStatusBar: Boolean = true,
+    /** Terminal lockscreen with dithered Creation of Adam art and biometric auth. */
+    val lockScreen: Boolean = true,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -87,6 +91,8 @@ class SettingsRepository(private val context: Context) {
         val scanlines = booleanPreferencesKey("scanlines")
         val glitch = booleanPreferencesKey("glitch")
         val typewriter = booleanPreferencesKey("typewriter")
+        val hideStatusBar = booleanPreferencesKey("hide_status_bar")
+        val lockScreen = booleanPreferencesKey("lock_screen")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map(::read).distinctUntilChanged()
@@ -122,6 +128,8 @@ class SettingsRepository(private val context: Context) {
             scanlines = p[K.scanlines] ?: d.scanlines,
             glitch = p[K.glitch] ?: d.glitch,
             typewriter = p[K.typewriter] ?: d.typewriter,
+            hideStatusBar = p[K.hideStatusBar] ?: d.hideStatusBar,
+            lockScreen = p[K.lockScreen] ?: d.lockScreen,
         )
     }
 
@@ -146,6 +154,8 @@ class SettingsRepository(private val context: Context) {
         p[K.scanlines] = s.scanlines
         p[K.glitch] = s.glitch
         p[K.typewriter] = s.typewriter
+        p[K.hideStatusBar] = s.hideStatusBar
+        p[K.lockScreen] = s.lockScreen
     }
 }
 

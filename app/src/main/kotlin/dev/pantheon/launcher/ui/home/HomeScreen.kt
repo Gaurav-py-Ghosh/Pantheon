@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -141,6 +142,7 @@ fun HomeScreen(
         modifier
             .fillMaxSize()
             .systemBarsPadding()
+            .displayCutoutPadding()
             .padding(horizontal = 16.dp),
     ) {
         Spacer(Modifier.height(10.dp))

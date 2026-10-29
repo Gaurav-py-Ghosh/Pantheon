@@ -75,6 +75,11 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
 
     BackHandler(enabled = backEnabled) { launcher.onBack() }
     LaunchedEffect(homePresses) { homePresses.collect { launcher.onHome() } }
+    LaunchedEffect(notifDrawer) {
+        dev.pantheon.launcher.accessibility.PantheonAccessibilityService.onInterceptShade = {
+            scope.launch { notifDrawer.open() }
+        }
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { launcher.onStop() }
     val edgePx = with(LocalDensity.current) { 28.dp.toPx() }
     LaunchedEffect(dragging) { if (dragging) launcher.edgeFlipLoop(edgePx) }
