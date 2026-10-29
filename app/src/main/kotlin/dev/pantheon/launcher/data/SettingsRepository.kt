@@ -12,12 +12,22 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
+@Serializable
 enum class ThemeMode { SYSTEM, DARK, LIGHT }
+
+@Serializable
 enum class LabelStyle { ICON_TAG_NAME, ICON_TAG, ICON, TAG }
+
+@Serializable
 enum class DrawerMode { AZ, CATEGORY }
 
+@Serializable
+enum class BackgroundMode { SOLID, WALLPAPER }
+
+@Serializable
 data class Settings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Accent preset id or `#RRGGBB`. */
@@ -39,6 +49,18 @@ data class Settings(
     val iconPack: String? = null,
     /** App key to icon specifier (`line:res_name` or `pack:pkg/drawable_name`). */
     val iconOverrides: Map<String, String> = emptyMap(),
+    /** Whether first-run boot setup wizard has completed. */
+    val setupDone: Boolean = false,
+    /** Double-tap empty space on home screen to lock. */
+    val doubleTapLock: Boolean = false,
+    /** Solid terminal background or wallpaper with dark/light overlay. */
+    val backgroundMode: BackgroundMode = BackgroundMode.SOLID,
+    /** CRT scanline overlay effect. */
+    val scanlines: Boolean = false,
+    /** Terminal glitch effect on drawer transition. */
+    val glitch: Boolean = false,
+    /** Typewriter effect on status line return. */
+    val typewriter: Boolean = true,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -59,12 +81,22 @@ class SettingsRepository(private val context: Context) {
         val imageFill = booleanPreferencesKey("image_fill")
         val iconPack = stringPreferencesKey("icon_pack")
         val iconOverrides = stringPreferencesKey("icon_overrides")
+        val setupDone = booleanPreferencesKey("setup_done")
+        val doubleTapLock = booleanPreferencesKey("double_tap_lock")
+        val backgroundMode = stringPreferencesKey("background_mode")
+        val scanlines = booleanPreferencesKey("scanlines")
+        val glitch = booleanPreferencesKey("glitch")
+        val typewriter = booleanPreferencesKey("typewriter")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map(::read).distinctUntilChanged()
 
     suspend fun update(transform: (Settings) -> Settings) {
         context.dataStore.edit { prefs -> write(prefs, transform(read(prefs))) }
+    }
+
+    suspend fun replace(newSettings: Settings) {
+        context.dataStore.edit { prefs -> write(prefs, newSettings) }
     }
 
     private fun read(p: Preferences): Settings {
@@ -84,6 +116,12 @@ class SettingsRepository(private val context: Context) {
             imageFill = p[K.imageFill] ?: d.imageFill,
             iconPack = p[K.iconPack],
             iconOverrides = p[K.iconOverrides]?.let { runCatching { Json.decodeFromString<Map<String, String>>(it) }.getOrNull() } ?: d.iconOverrides,
+            setupDone = p[K.setupDone] ?: d.setupDone,
+            doubleTapLock = p[K.doubleTapLock] ?: d.doubleTapLock,
+            backgroundMode = enumOr(p[K.backgroundMode], d.backgroundMode),
+            scanlines = p[K.scanlines] ?: d.scanlines,
+            glitch = p[K.glitch] ?: d.glitch,
+            typewriter = p[K.typewriter] ?: d.typewriter,
         )
     }
 
@@ -102,6 +140,12 @@ class SettingsRepository(private val context: Context) {
         p[K.imageFill] = s.imageFill
         if (s.iconPack != null) p[K.iconPack] = s.iconPack else p.remove(K.iconPack)
         p[K.iconOverrides] = Json.encodeToString(s.iconOverrides)
+        p[K.setupDone] = s.setupDone
+        p[K.doubleTapLock] = s.doubleTapLock
+        p[K.backgroundMode] = s.backgroundMode.name
+        p[K.scanlines] = s.scanlines
+        p[K.glitch] = s.glitch
+        p[K.typewriter] = s.typewriter
     }
 }
 
