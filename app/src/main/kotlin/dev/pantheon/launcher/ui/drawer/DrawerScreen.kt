@@ -1,8 +1,10 @@
 package dev.pantheon.launcher.ui.drawer
 
 import android.content.pm.ApplicationInfo
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -88,6 +90,7 @@ fun DrawerScreen(
     tags: Map<String, String>,
     settings: Settings,
     onLaunch: LaunchFn,
+    onLongPress: (AppEntry, Rect) -> Unit,
     onToggleMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -196,14 +199,20 @@ fun DrawerScreen(
             val nested = remember(drawer, distancePx) { drawerNestedScroll(drawer, distancePx) }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (query.isBlank()) {
-                    AppList(visible, tags, settings, nested, onLaunch)
+                    AppList(visible, tags, settings, nested, onLaunch, onLongPress)
                 } else {
                     LazyColumn(
                         Modifier.fillMaxSize().nestedScroll(nested),
                         contentPadding = PaddingValues(bottom = 24.dp),
                     ) {
                         items(hits, key = ::hitKey) { hit ->
-                            HitRow(hit, tags, settings.hidden, onClick = { b -> activate(hit, b) })
+                            HitRow(
+                                hit = hit,
+                                tags = tags,
+                                hidden = settings.hidden,
+                                onClick = { b -> activate(hit, b) },
+                                onLongClick = (hit as? Hit.App)?.let { h -> { b: Rect -> onLongPress(h.entry, b) } },
+                            )
                         }
                     }
                 }
@@ -269,6 +278,7 @@ private fun AppList(
     settings: Settings,
     nested: NestedScrollConnection,
     onLaunch: LaunchFn,
+    onLongPress: (AppEntry, Rect) -> Unit,
 ) {
     val colors = Pantheon.colors
     val mode = settings.drawerMode
@@ -298,7 +308,13 @@ private fun AppList(
                     }
                 }
                 items(list, key = { it.key }) { entry ->
-                    HitRow(Hit.App(entry), tags, settings.hidden, onClick = { b -> onLaunch(entry, b) })
+                    HitRow(
+                        hit = Hit.App(entry),
+                        tags = tags,
+                        hidden = settings.hidden,
+                        onClick = { b -> onLaunch(entry, b) },
+                        onLongClick = { b -> onLongPress(entry, b) },
+                    )
                 }
             }
         }
@@ -376,8 +392,15 @@ private class BoundsHolder {
     var rect: Rect? = null
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun HitRow(hit: Hit, tags: Map<String, String>, hidden: Set<String>, onClick: (Rect?) -> Unit) {
+private fun HitRow(
+    hit: Hit,
+    tags: Map<String, String>,
+    hidden: Set<String>,
+    onClick: (Rect?) -> Unit,
+    onLongClick: ((Rect) -> Unit)? = null,
+) {
     val colors = Pantheon.colors
     val bounds = remember { BoundsHolder() }
     val interaction = remember { MutableInteractionSource() }
@@ -389,7 +412,12 @@ private fun HitRow(hit: Hit, tags: Map<String, String>, hidden: Set<String>, onC
             .onGloballyPositioned { bounds.rect = it.boundsInWindow() }
             .clip(RoundedCornerShape(8.dp))
             .background(if (pressed) colors.surface else Color.Transparent)
-            .clickable(interaction, indication = null) { onClick(bounds.rect) }
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onLongClick = onLongClick?.let { cb -> { bounds.rect?.let(cb) } },
+                onClick = { onClick(bounds.rect) },
+            )
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

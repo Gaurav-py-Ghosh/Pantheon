@@ -3,7 +3,13 @@ package dev.pantheon.launcher.ui.home
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -15,25 +21,42 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.pantheon.launcher.data.AppEntry
+import dev.pantheon.launcher.data.DragSource
+import dev.pantheon.launcher.data.DropTarget
 import dev.pantheon.launcher.data.HomeLayout
 import dev.pantheon.launcher.data.HomePage
 import dev.pantheon.launcher.data.ItemContent
@@ -43,9 +66,29 @@ import dev.pantheon.launcher.ui.components.AppIconImage
 import dev.pantheon.launcher.ui.components.BlinkingCursor
 import dev.pantheon.launcher.ui.components.TText
 import dev.pantheon.launcher.ui.components.terminalBox
+import dev.pantheon.launcher.ui.edit.CoordsHolder
+import dev.pantheon.launcher.ui.edit.DragController
+import dev.pantheon.launcher.ui.edit.HomeGeometry
+import dev.pantheon.launcher.ui.edit.rememberItemDrag
 import dev.pantheon.launcher.ui.theme.Pantheon
 
 typealias LaunchFn = (AppEntry, Rect?) -> Unit
+
+/** Everything the home screen can ask the launcher to do. */
+@Stable
+interface HomeActions {
+    val editMode: Boolean
+    fun launch(entry: AppEntry, bounds: Rect?)
+    fun appLongPress(entry: AppEntry, source: DragSource, bounds: Rect)
+    fun emptyLongPress(at: Offset)
+    fun dragStart(entry: AppEntry, source: DragSource, bounds: Rect, finger: Offset)
+    fun dragMove(finger: Offset)
+    fun dragEnd()
+    fun dragCancel()
+    fun addPage()
+    fun deletePage()
+    fun exitEdit()
+}
 
 @Composable
 fun HomeScreen(
@@ -54,10 +97,25 @@ fun HomeScreen(
     tags: Map<String, String>,
     settings: Settings,
     pagerState: PagerState,
+    drag: DragController,
+    geometry: HomeGeometry,
+    actions: HomeActions,
     onSearch: () -> Unit,
-    onLaunch: LaunchFn,
     modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
+    val cellH = cellHeight(settings.labelStyle)
+    SideEffect {
+        geometry.columns = settings.columns
+        geometry.cellHeightPx = with(density) { cellH.toPx() }
+        geometry.dockSlots = settings.dockSlots
+    }
+    val target by remember(layout) {
+        derivedStateOf {
+            drag.active?.let { a -> geometry.targetAt(a.center(drag.finger), layout.pages.getOrNull(pagerState.currentPage)?.id) }
+        }
+    }
+
     Column(
         modifier
             .fillMaxSize()
@@ -65,7 +123,7 @@ fun HomeScreen(
             .padding(horizontal = 16.dp),
     ) {
         Spacer(Modifier.height(10.dp))
-        StatusLine()
+        if (actions.editMode) EditBar(actions) else StatusLine()
         Spacer(Modifier.height(12.dp))
         SearchStub(onSearch)
         Spacer(Modifier.height(16.dp))
@@ -73,18 +131,29 @@ fun HomeScreen(
             state = pagerState,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .onGloballyPositioned { geometry.grid = it.boundsInWindow() },
             key = { layout.pages.getOrNull(it)?.id ?: it },
-            beyondViewportPageCount = 1,
+            // Keep every page composed so a drag can carry an item across pages.
+            beyondViewportPageCount = layout.pages.size,
         ) { index ->
             layout.pages.getOrNull(index)?.let { page ->
-                HomeGrid(page, settings.columns, settings.labelStyle, apps, tags, onLaunch)
+                HomeGrid(
+                    page = page,
+                    columns = settings.columns,
+                    style = settings.labelStyle,
+                    cellH = cellH,
+                    apps = apps,
+                    tags = tags,
+                    drag = drag,
+                    actions = actions,
+                    highlight = (target as? DropTarget.Cell)?.takeIf { it.pageId == page.id },
+                )
             }
         }
         if (layout.pages.size > 1) PageIndicator(pagerState.currentPage, layout.pages.size)
         Spacer(Modifier.height(10.dp))
-        val dock = (0 until settings.dockSlots).map { layout.dock.getOrNull(it)?.let(apps::get) }
-        Dock(dock, tags, settings.dockLabels, onLaunch)
+        Dock(layout, apps, tags, settings, drag, geometry, actions, highlight = (target as? DropTarget.DockSlot)?.index)
         Spacer(Modifier.height(10.dp))
     }
 }
@@ -107,7 +176,39 @@ private fun SearchStub(onClick: () -> Unit) {
     }
 }
 
-private fun cellHeight(style: LabelStyle): Dp = when (style) {
+@Composable
+private fun EditBar(actions: HomeActions) {
+    val colors = Pantheon.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .terminalBox(colors, radius = 8.dp)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TText("$ edit --layout", color = colors.accent, size = 12.sp, glow = true, modifier = Modifier.weight(1f).padding(start = 6.dp))
+        BarButton("[+pg]", onClick = actions::addPage)
+        BarButton("[-pg]", onClick = actions::deletePage)
+        BarButton("[done]", accent = true, onClick = actions::exitEdit)
+    }
+}
+
+@Composable
+private fun BarButton(label: String, accent: Boolean = false, onClick: () -> Unit) {
+    val colors = Pantheon.colors
+    TText(
+        label,
+        color = if (accent) colors.accent else colors.text,
+        size = 12.sp,
+        glow = accent,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 7.dp),
+    )
+}
+
+fun cellHeight(style: LabelStyle): Dp = when (style) {
     LabelStyle.ICON_TAG_NAME -> 92.dp
     LabelStyle.ICON_TAG -> 76.dp
     LabelStyle.ICON -> 64.dp
@@ -119,25 +220,57 @@ private fun HomeGrid(
     page: HomePage,
     columns: Int,
     style: LabelStyle,
+    cellH: Dp,
     apps: Map<String, AppEntry>,
     tags: Map<String, String>,
-    onLaunch: LaunchFn,
+    drag: DragController,
+    actions: HomeActions,
+    highlight: DropTarget.Cell?,
 ) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val colors = Pantheon.colors
+    val currentActions by rememberUpdatedState(actions)
+    val coords = remember { CoordsHolder() }
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { coords.value = it }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onLongPress = { offset ->
+                        val c = coords.value?.takeIf { it.isAttached } ?: return@detectTapGestures
+                        if (!currentActions.editMode) currentActions.emptyLongPress(c.localToWindow(offset))
+                    },
+                )
+            },
+    ) {
         val cellW = maxWidth / columns
-        val cellH = cellHeight(style)
-        val rows = (maxHeight / cellH).toInt()
-        page.items.forEach { item ->
-            if (item.x + item.w > columns || item.y + item.h > rows) return@forEach
+        val rows = (maxHeight / cellH).toInt().coerceAtLeast(1)
+
+        if (actions.editMode || drag.active != null) GridGuides(columns, rows, cellW, cellH)
+        highlight?.let { cell ->
+            val shape = RoundedCornerShape(10.dp)
             Box(
                 Modifier
-                    .offset(cellW * item.x, cellH * item.y)
-                    .size(cellW * item.w, cellH * item.h),
-                contentAlignment = Alignment.Center,
-            ) {
-                when (val content = item.content) {
-                    is ItemContent.App -> apps[content.key]?.let { entry ->
-                        AppCell(entry, tags[entry.key].orEmpty(), style, 30.dp, onLaunch)
+                    .offset(cellW * cell.x, cellH * cell.y)
+                    .size(cellW, cellH)
+                    .padding(3.dp)
+                    .background(colors.accent.copy(alpha = 0.08f), shape)
+                    .border(1.dp, colors.accent, shape),
+            )
+        }
+        page.items.forEach { item ->
+            if (item.x + item.w > columns || item.y + item.h > rows) return@forEach
+            key(item.id) {
+                Box(
+                    Modifier
+                        .offset(cellW * item.x, cellH * item.y)
+                        .size(cellW * item.w, cellH * item.h),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when (val content = item.content) {
+                        is ItemContent.App -> apps[content.key]?.let { entry ->
+                            AppCell(entry, tags[entry.key].orEmpty(), style, 30.dp, DragSource.Home(page.id, item.id), actions, drag)
+                        }
                     }
                 }
             }
@@ -145,30 +278,32 @@ private fun HomeGrid(
     }
 }
 
-private class BoundsHolder {
-    var rect: Rect? = null
+@Composable
+private fun GridGuides(columns: Int, rows: Int, cellW: Dp, cellH: Dp) {
+    val color = Pantheon.colors.border
+    Canvas(Modifier.size(cellW * columns, cellH * rows)) {
+        val cw = cellW.toPx()
+        val ch = cellH.toPx()
+        val inset = 4.dp.toPx()
+        val stroke = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx())))
+        for (y in 0 until rows) for (x in 0 until columns) {
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(x * cw + inset, y * ch + inset),
+                size = Size(cw - inset * 2, ch - inset * 2),
+                cornerRadius = CornerRadius(8.dp.toPx()),
+                style = stroke,
+            )
+        }
+    }
 }
 
+/** Icon, `[tag]` and name, without any gestures. Shared by grid, dock and the drag ghost. */
 @Composable
-fun AppCell(entry: AppEntry, tag: String, style: LabelStyle, iconSize: Dp, onLaunch: LaunchFn, modifier: Modifier = Modifier) {
+fun AppCellContent(entry: AppEntry, tag: String, style: LabelStyle, iconSize: Dp, modifier: Modifier = Modifier) {
     val colors = Pantheon.colors
-    val bounds = remember { BoundsHolder() }
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.9f else 1f,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
-        label = "press",
-    )
     Column(
-        modifier
-            .onGloballyPositioned { bounds.rect = it.boundsInWindow() }
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clickable(interaction, indication = null) { onLaunch(entry, bounds.rect) }
-            .padding(horizontal = 2.dp, vertical = 4.dp),
+        modifier.padding(horizontal = 2.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -183,31 +318,121 @@ fun AppCell(entry: AppEntry, tag: String, style: LabelStyle, iconSize: Dp, onLau
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Dock(slots: List<AppEntry?>, tags: Map<String, String>, labels: Boolean, onLaunch: LaunchFn) {
+fun AppCell(
+    entry: AppEntry,
+    tag: String,
+    style: LabelStyle,
+    iconSize: Dp,
+    source: DragSource,
+    actions: HomeActions,
+    drag: DragController,
+    modifier: Modifier = Modifier,
+) {
+    val coords = remember { CoordsHolder() }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val dimmed = drag.active?.source == source
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && !actions.editMode) 0.9f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
+        label = "press",
+    )
+    val dragModifier = rememberItemDrag(
+        isArmed = { actions.editMode || drag.armed == source },
+        coordinates = { coords.value },
+        onStart = { finger -> coords.bounds()?.let { actions.dragStart(entry, source, it, finger) } },
+        onMove = actions::dragMove,
+        onEnd = actions::dragEnd,
+        onCancel = actions::dragCancel,
+        onRelease = drag::disarm,
+    )
+    AppCellContent(
+        entry = entry,
+        tag = tag,
+        style = style,
+        iconSize = iconSize,
+        modifier = modifier
+            .onGloballyPositioned { coords.value = it }
+            .then(dragModifier)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                alpha = if (dimmed) 0.25f else 1f
+            }
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onLongClick = {
+                    if (!actions.editMode) {
+                        coords.bounds()?.let { b ->
+                            drag.arm(source)
+                            actions.appLongPress(entry, source, b)
+                        }
+                    }
+                },
+                onClick = { if (!actions.editMode) actions.launch(entry, coords.bounds()) },
+            ),
+    )
+}
+
+@Composable
+private fun Dock(
+    layout: HomeLayout,
+    apps: Map<String, AppEntry>,
+    tags: Map<String, String>,
+    settings: Settings,
+    drag: DragController,
+    geometry: HomeGeometry,
+    actions: HomeActions,
+    highlight: Int?,
+) {
     val colors = Pantheon.colors
+    val showEmpty = actions.editMode || drag.active != null
     Row(
         Modifier
             .fillMaxWidth()
+            .onGloballyPositioned { geometry.dock = it.boundsInWindow() }
             .terminalBox(colors, radius = 14.dp)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        slots.forEach { entry ->
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+        repeat(settings.dockSlots) { slot ->
+            val entry = layout.dock.getOrNull(slot)?.let(apps::get)
+            Box(
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = 56.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (highlight == slot) {
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .padding(horizontal = 3.dp)
+                            .border(1.dp, colors.accent, RoundedCornerShape(10.dp)),
+                    )
+                }
                 if (entry != null) {
                     AppCell(
                         entry = entry,
                         tag = tags[entry.key].orEmpty(),
-                        style = if (labels) LabelStyle.ICON_TAG_NAME else LabelStyle.ICON,
+                        style = dockStyle(settings),
                         iconSize = 28.dp,
-                        onLaunch = onLaunch,
+                        source = DragSource.Dock(slot),
+                        actions = actions,
+                        drag = drag,
                     )
+                } else if (showEmpty) {
+                    TText("[+]", color = colors.textDim, size = 12.sp)
                 }
             }
         }
     }
 }
+
+fun dockStyle(settings: Settings) = if (settings.dockLabels) LabelStyle.ICON_TAG_NAME else LabelStyle.ICON
 
 @Composable
 private fun PageIndicator(current: Int, count: Int) {
@@ -220,4 +445,28 @@ private fun PageIndicator(current: Int, count: Int) {
         }
         TText(" ]", color = colors.textDim, size = 12.sp)
     }
+}
+
+/** The floating copy of an item under the finger while dragging. */
+@Composable
+fun DragGhost(drag: DragController, tags: Map<String, String>, settings: Settings) {
+    val active = drag.active ?: return
+    val density = LocalDensity.current
+    val style = if (active.source is DragSource.Dock) dockStyle(settings) else settings.labelStyle
+    AppCellContent(
+        entry = active.entry,
+        tag = tags[active.entry.key].orEmpty(),
+        style = style,
+        iconSize = if (active.source is DragSource.Dock) 28.dp else 30.dp,
+        modifier = Modifier
+            .size(with(density) { active.size.width.toDp() }, with(density) { active.size.height.toDp() })
+            .graphicsLayer {
+                val topLeft = drag.finger - active.touchOffset
+                translationX = topLeft.x
+                translationY = topLeft.y
+                scaleX = 1.12f
+                scaleY = 1.12f
+                alpha = 0.95f
+            },
+    )
 }

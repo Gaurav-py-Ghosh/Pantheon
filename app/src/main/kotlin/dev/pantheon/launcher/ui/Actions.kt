@@ -8,6 +8,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.UserHandle
 import android.provider.Settings
 import android.view.View
 import androidx.compose.ui.geometry.Rect
@@ -57,6 +58,12 @@ object Actions {
             if (start(context, intent)) return
         }
         start(context, Intent(Intent.ACTION_VIEW, Uri.parse((base ?: "https://www.google.com/search?q=") + Uri.encode(query))))
+    }
+
+    fun uninstall(context: Context, entry: AppEntry, user: UserHandle?) {
+        val intent = Intent(Intent.ACTION_DELETE, Uri.parse("package:${entry.packageName}"))
+        user?.let { intent.putExtra(Intent.EXTRA_USER, it) }
+        start(context, intent)
     }
 
     fun copy(context: Context, text: String) {

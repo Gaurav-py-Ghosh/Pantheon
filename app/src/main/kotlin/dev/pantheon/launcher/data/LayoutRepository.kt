@@ -22,8 +22,8 @@ private fun newId() = UUID.randomUUID().toString()
 @Serializable
 data class HomeLayout(
     val pages: List<HomePage> = listOf(HomePage()),
-    /** App keys, in slot order. */
-    val dock: List<String> = emptyList(),
+    /** App keys by slot; null is an empty slot. */
+    val dock: List<String?> = emptyList(),
     val seeded: Boolean = false,
 )
 

@@ -88,8 +88,14 @@ class DrawerController(private val scope: CoroutineScope) {
  * notification shade. Placed on an untransformed parent so finger coordinates stay true
  * while the home and drawer layers move.
  */
-fun Modifier.launcherGestures(drawer: DrawerController, distancePx: Float, onPullDown: () -> Unit): Modifier =
-    pointerInput(drawer, distancePx) {
+fun Modifier.launcherGestures(
+    drawer: DrawerController,
+    distancePx: Float,
+    enabled: Boolean,
+    onPullDown: () -> Unit,
+): Modifier =
+    pointerInput(drawer, distancePx, enabled) {
+        if (!enabled) return@pointerInput
         val pullThreshold = 72.dp.toPx()
         val tracker = VelocityTracker()
         var pulled = 0f

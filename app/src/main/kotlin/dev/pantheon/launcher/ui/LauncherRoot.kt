@@ -12,6 +12,8 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -25,8 +27,11 @@ import dev.pantheon.launcher.container
 import dev.pantheon.launcher.data.DrawerMode
 import dev.pantheon.launcher.data.Settings
 import dev.pantheon.launcher.ui.drawer.DrawerScreen
+import dev.pantheon.launcher.ui.edit.MenuOverlay
+import dev.pantheon.launcher.ui.edit.RenamePrompt
+import dev.pantheon.launcher.ui.edit.ToastHost
+import dev.pantheon.launcher.ui.home.DragGhost
 import dev.pantheon.launcher.ui.home.HomeScreen
-import dev.pantheon.launcher.ui.home.LaunchFn
 import dev.pantheon.launcher.ui.theme.Pantheon
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -38,24 +43,26 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
     val c = context.container
     val colors = Pantheon.colors
     val scope = rememberCoroutineScope()
+    val settingsState = rememberUpdatedState(settings)
 
     val apps by c.apps.apps.collectAsStateWithLifecycle()
-    val layout by c.layout.layout.collectAsStateWithLifecycle()
+    val layoutState = c.layout.layout.collectAsStateWithLifecycle()
     val byKey = remember(apps) { apps.associateBy { it.key } }
     val tags = remember(apps, settings.tags) { apps.associate { it.key to c.tags.tagFor(it, settings.tags) } }
 
     val drawer = remember { DrawerController(scope) }
+    val pager = rememberPagerState { layoutState.value?.pages?.size ?: 1 }
+    val launcher = remember { LauncherController(context, view, scope, drawer, pager, layoutState, settingsState) }
     val drawerVisible by remember { derivedStateOf { drawer.progress > 0f } }
-    val pager = rememberPagerState { layout?.pages?.size ?: 1 }
-    val launch: LaunchFn = remember(view) { { entry, bounds -> Actions.launchApp(view, entry, bounds) } }
+    val dragging by remember { derivedStateOf { launcher.drag.active != null } }
+    // derivedStateOf so drawer animation frames don't recompose the root.
+    val backEnabled by remember { derivedStateOf { launcher.backEnabled } }
 
-    BackHandler(enabled = drawerVisible) { drawer.close() }
-    LaunchedEffect(homePresses) {
-        homePresses.collect {
-            if (drawer.progress > 0f) drawer.close() else pager.animateScrollToPage(0)
-        }
-    }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { drawer.snapClosed() }
+    BackHandler(enabled = backEnabled) { launcher.onBack() }
+    LaunchedEffect(homePresses) { homePresses.collect { launcher.onHome() } }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { launcher.onStop() }
+    val edgePx = with(LocalDensity.current) { 28.dp.toPx() }
+    LaunchedEffect(dragging) { if (dragging) launcher.edgeFlipLoop(edgePx) }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(colors.background)) {
         val distance = constraints.maxHeight * 0.45f
@@ -66,17 +73,24 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
         Box(
             Modifier
                 .fillMaxSize()
-                .launcherGestures(drawer, distance, onPullDown = { Actions.expandNotifications(context) }),
+                .launcherGestures(
+                    drawer = drawer,
+                    distancePx = distance,
+                    enabled = !launcher.editMode,
+                    onPullDown = { Actions.expandNotifications(context) },
+                ),
         ) {
-            layout?.let { l ->
+            layoutState.value?.let { layout ->
                 HomeScreen(
-                    layout = l,
+                    layout = layout,
                     apps = byKey,
                     tags = tags,
                     settings = settings,
                     pagerState = pager,
+                    drag = launcher.drag,
+                    geometry = launcher.geometry,
+                    actions = launcher,
                     onSearch = { drawer.open(focus = true) },
-                    onLaunch = launch,
                     modifier = Modifier.graphicsLayer {
                         val p = drawer.progress
                         alpha = 1f - p
@@ -94,7 +108,8 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                     apps = apps,
                     tags = tags,
                     settings = settings,
-                    onLaunch = launch,
+                    onLaunch = launcher::launch,
+                    onLongPress = launcher::drawerLongPress,
                     onToggleMode = {
                         scope.launch {
                             c.settings.update {
@@ -109,6 +124,18 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                     },
                 )
             }
+        }
+
+        DragGhost(launcher.drag, tags, settings)
+        ToastHost(launcher.toast, Modifier.align(Alignment.BottomCenter))
+        MenuOverlay(launcher.menu)
+        launcher.renaming?.let { entry ->
+            RenamePrompt(
+                entry = entry,
+                current = tags[entry.key].orEmpty(),
+                onSubmit = { launcher.setTag(entry, it) },
+                onDismiss = { launcher.renaming = null },
+            )
         }
     }
 }
