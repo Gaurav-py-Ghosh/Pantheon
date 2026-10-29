@@ -106,6 +106,7 @@ interface HomeActions {
     fun pickImagesFor(pageId: String, itemId: String)
     fun requestPhotoAccess()
     fun requestCalendarAccess()
+    fun onDoubleTap()
 }
 
 @Composable
@@ -120,6 +121,7 @@ fun HomeScreen(
     actions: HomeActions,
     onSearch: () -> Unit,
     notifications: Map<String, Int> = emptyMap(),
+    onOpenSysinfo: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -142,7 +144,7 @@ fun HomeScreen(
             .padding(horizontal = 16.dp),
     ) {
         Spacer(Modifier.height(10.dp))
-        if (actions.editMode) EditBar(actions) else StatusLine()
+        if (actions.editMode) EditBar(actions) else StatusLine(typewriter = settings.typewriter, onClick = onOpenSysinfo)
         Spacer(Modifier.height(12.dp))
         SearchStub(onSearch)
         Spacer(Modifier.height(16.dp))
@@ -258,6 +260,7 @@ private fun HomeGrid(
             .onGloballyPositioned { coords.value = it }
             .pointerInput(Unit) {
                 detectTapGestures(
+                    onDoubleTap = { currentActions.onDoubleTap() },
                     onLongPress = { offset ->
                         val c = coords.value?.takeIf { it.isAttached } ?: return@detectTapGestures
                         if (!currentActions.editMode) currentActions.emptyLongPress(c.localToWindow(offset))

@@ -32,9 +32,13 @@ object Actions {
 
     @SuppressLint("WrongConstant", "PrivateApi")
     fun expandNotifications(context: Context) {
-        runCatching {
-            val statusBar = context.getSystemService("statusbar") ?: return
+        val expanded = runCatching {
+            val statusBar = context.getSystemService("statusbar") ?: return@runCatching false
             Class.forName("android.app.StatusBarManager").getMethod("expandNotificationsPanel").invoke(statusBar)
+            true
+        }.getOrDefault(false)
+        if (!expanded) {
+            dev.pantheon.launcher.accessibility.PantheonAccessibilityService.expandNotifications()
         }
     }
 
