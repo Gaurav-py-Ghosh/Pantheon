@@ -235,7 +235,7 @@ private fun TopStrip(settings: Settings, onCyclePet: () -> Unit) {
                 .fillMaxHeight()
                 .padding(horizontal = 10.dp, vertical = 2.dp),
         ) {
-            if (settings.pet) TerminalPet(Modifier.fillMaxSize(), petType = settings.petType, onCycle = onCyclePet)
+            if (settings.pet) TerminalPet(Modifier.fillMaxSize(), petType = settings.petType, sysSnapshot = snap, onCycle = onCyclePet)
         }
         snap?.let { s ->
             TText((if (s.charging) "+" else "") + "${s.battery}%", color = if (s.battery <= 15) colors.warn else colors.text, size = 12.sp)

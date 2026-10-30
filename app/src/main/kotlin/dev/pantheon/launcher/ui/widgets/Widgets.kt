@@ -191,10 +191,12 @@ fun WidgetItem(
             is ItemContent.Pet -> {
                 val context = LocalContext.current
                 val settings by context.container.settings.settings.collectAsStateWithLifecycle(initialValue = Settings())
+                val snap by remember(context) { context.container.stats.snapshots }.collectAsStateWithLifecycle(initialValue = null)
                 WidgetFrame("~/pet", frame) {
                     TerminalPet(
                         Modifier.fillMaxSize().padding(6.dp),
                         petType = settings.petType,
+                        sysSnapshot = snap,
                         onCycle = {
                             val all = listOf("cat", "dog", "dino", "duck", "ghost", "crab")
                             val next = all[(all.indexOf(settings.petType) + 1) % all.size]

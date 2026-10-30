@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import dev.pantheon.launcher.data.SysSnapshot
 import dev.pantheon.launcher.ui.theme.Pantheon
 import kotlinx.coroutines.delay
 import java.util.Calendar
@@ -35,7 +36,34 @@ import kotlin.random.Random
 private const val SPRITE_W = 13
 private const val SPRITE_H = 8
 
-private enum class Mood { WALK, SIT, SLEEP }
+private enum class Mood { WALK, SIT, SLEEP, HUNGRY, HYPER }
+
+private val FORTUNES = listOf(
+    "$ sudo rm -rf /",
+    "[all systems nominal]",
+    "[uptime: 42h]",
+    "404 nap not found",
+    "$ git push --force",
+    "[status: 200 OK]",
+    "ping 127.0.0.1",
+    "<3",
+)
+
+private val HUNGRY_BUBBLES = listOf(
+    "*feed me*",
+    "[low_pwr]",
+    "*hungry*",
+    "[bat: low]",
+    "<:(",
+)
+
+private val HYPER_BUBBLES = listOf(
+    "⚡ 100%",
+    "*zoom*",
+    "[hyper!]",
+    "*overclock*",
+    "[full power!]",
+)
 
 private data class PetSprite(
     val head: List<String>,
@@ -194,6 +222,7 @@ private fun rememberIsResumed(): Boolean {
 fun TerminalPet(
     modifier: Modifier = Modifier,
     petType: String = "cat",
+    sysSnapshot: SysSnapshot? = null,
     onCycle: (() -> Unit)? = null,
 ) {
     val colors = Pantheon.colors
@@ -226,7 +255,7 @@ fun TerminalPet(
         var heartTicks by remember { mutableIntStateOf(0) }
         var customBubble by remember { mutableStateOf<String?>(null) }
 
-        LaunchedEffect(resumed, maxX, pixel, petType) {
+        LaunchedEffect(resumed, maxX, pixel, petType, sysSnapshot) {
             if (!resumed) return@LaunchedEffect
             var moodTicks = 0
             while (true) {
@@ -238,6 +267,20 @@ fun TerminalPet(
 
                 val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
                 val night = hour >= 23 || hour < 7
+                val isCharging = sysSnapshot?.charging == true
+                val isLowBattery = (sysSnapshot?.battery ?: 100) <= 20 && !isCharging
+                val isHighNet = (sysSnapshot?.netBitsPerSec ?: 0L) > 4_000_000L
+
+                // System-aware mood shifts
+                if (isLowBattery && mood != Mood.HUNGRY && heartTicks <= 0) {
+                    mood = Mood.HUNGRY
+                    moodTicks = 120
+                } else if (isCharging && mood != Mood.HYPER && heartTicks <= 0) {
+                    mood = Mood.HYPER
+                    moodTicks = 120
+                } else if (night && mood != Mood.SLEEP && heartTicks <= 0) {
+                    mood = Mood.SLEEP
+                }
 
                 when (mood) {
                     Mood.WALK -> {
@@ -249,6 +292,31 @@ fun TerminalPet(
                         if (Random.nextInt(100) < 3) {
                             mood = Mood.SIT
                             moodTicks = Random.nextInt(20, 60)
+                        }
+                        // Random fortunes in normal mode
+                        if (frame % 110 == 0 && Random.nextInt(100) < 35 && heartTicks <= 0) {
+                            customBubble = FORTUNES.random()
+                            heartTicks = 22
+                        }
+                    }
+                    Mood.HUNGRY -> {
+                        // Walks sluggishly when phone battery is <= 20%
+                        if (frame % 2 == 0) x += if (facingLeft) -pixel else pixel
+                        if (x <= 0f) { x = 0f; facingLeft = false }
+                        if (x >= maxX) { x = maxX; facingLeft = true }
+                        blink = frame % 18 in 0..2
+                        if (frame % 45 in 0..14 && heartTicks <= 0) {
+                            customBubble = HUNGRY_BUBBLES.random()
+                        }
+                    }
+                    Mood.HYPER -> {
+                        // High speed + frequent hops when charging or fast net
+                        x += if (facingLeft) -pixel * 1.5f else pixel * 1.5f
+                        if (x <= 0f) { x = 0f; facingLeft = false }
+                        if (x >= maxX) { x = maxX; facingLeft = true }
+                        if (frame % 8 == 0) hopTicks = 5
+                        if (frame % 40 in 0..12 && heartTicks <= 0) {
+                            customBubble = HYPER_BUBBLES.random()
                         }
                     }
                     Mood.SIT -> {
@@ -281,11 +349,25 @@ fun TerminalPet(
                     detectTapGestures(
                         onTap = { tap ->
                             if (tap.x in (x - pixel * 5)..(x + spriteW + pixel * 5)) {
-                                mood = Mood.WALK
                                 blink = false
-                                hopTicks = 6
-                                heartTicks = 14
-                                customBubble = sprite.sound
+                                when (mood) {
+                                    Mood.HUNGRY -> {
+                                        customBubble = "*nom nom!*"
+                                        hopTicks = 8
+                                        heartTicks = 24
+                                        mood = Mood.WALK
+                                    }
+                                    Mood.HYPER -> {
+                                        customBubble = "*supercharged!*"
+                                        hopTicks = 9
+                                        heartTicks = 24
+                                    }
+                                    else -> {
+                                        customBubble = sprite.sound
+                                        hopTicks = 7
+                                        heartTicks = 18
+                                    }
+                                }
                             }
                         },
                         onLongPress = { tap ->
@@ -301,7 +383,8 @@ fun TerminalPet(
         ) {
             val head = if (blink) sprite.headBlink else sprite.head
             val body = when (mood) {
-                Mood.WALK -> if (frame % 2 == 0) sprite.walkA else sprite.walkB
+                Mood.WALK, Mood.HYPER -> if (frame % 2 == 0) sprite.walkA else sprite.walkB
+                Mood.HUNGRY -> if (frame % 2 == 0) sprite.sit else sprite.walkA
                 Mood.SIT -> sprite.sit
                 Mood.SLEEP -> sprite.sleep
             }

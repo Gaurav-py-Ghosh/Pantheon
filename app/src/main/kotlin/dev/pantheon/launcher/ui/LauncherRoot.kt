@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import dev.pantheon.launcher.ui.components.MusicIsland
+import dev.pantheon.launcher.ui.components.BatteryCutoutRing
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,6 +70,7 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
     val notifications by c.notifications.collectAsStateWithLifecycle()
     val notificationItems by c.notificationItems.collectAsStateWithLifecycle()
     val musicTrack by c.music.currentTrack.collectAsStateWithLifecycle()
+    val statsSnap by c.stats.snapshots.collectAsStateWithLifecycle(initialValue = null)
     val byKey = remember(apps) { apps.associateBy { it.key } }
     val tags = remember(apps, settings.tags) { apps.associate { it.key to c.tags.tagFor(it, settings.tags) } }
 
@@ -195,24 +197,32 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
             }
         }
 
-        if (settings.musicIsland && musicTrack != null && !notifDrawerVisible) {
+        val isMusicShowing = settings.musicIsland && musicTrack != null && !notifDrawerVisible
+        if (!notifDrawerVisible) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter),
                 contentAlignment = Alignment.TopCenter,
             ) {
-                MusicIsland(
-                    track = musicTrack!!,
-                    isAtCutout = true,
-                    onOpenApp = {
-                        val pkg = musicTrack?.packageName
-                        if (pkg != null) {
-                            val intent = context.packageManager.getLaunchIntentForPackage(pkg)
-                            if (intent != null) context.startActivity(intent)
-                        }
-                    },
-                )
+                if (isMusicShowing) {
+                    MusicIsland(
+                        track = musicTrack!!,
+                        isAtCutout = true,
+                        onOpenApp = {
+                            val pkg = musicTrack?.packageName
+                            if (pkg != null) {
+                                val intent = context.packageManager.getLaunchIntentForPackage(pkg)
+                                if (intent != null) context.startActivity(intent)
+                            }
+                        },
+                    )
+                } else if (statsSnap != null) {
+                    BatteryCutoutRing(
+                        charging = statsSnap!!.charging,
+                        batteryLevel = statsSnap!!.battery,
+                    )
+                }
             }
         }
 
