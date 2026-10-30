@@ -32,6 +32,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.pantheon.launcher.data.DragSource
 import dev.pantheon.launcher.data.HomeItem
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.pantheon.launcher.container
+import dev.pantheon.launcher.data.Settings
 import dev.pantheon.launcher.data.ItemContent
 import dev.pantheon.launcher.data.hasFrame
 import dev.pantheon.launcher.ui.components.TText
@@ -184,7 +188,21 @@ fun WidgetItem(
             is ItemContent.Sysmon -> WidgetFrame("~/sysmon", frame) { SysmonWidget() }
             is ItemContent.Agenda -> WidgetFrame("~/calendar", frame) { AgendaWidget(actions) }
             is ItemContent.Notes -> WidgetFrame("~/notes/todo.txt", frame) { NotesWidget(item.id, actions) }
-            is ItemContent.Pet -> WidgetFrame("~/pet", frame) { TerminalPet(Modifier.fillMaxSize().padding(6.dp)) }
+            is ItemContent.Pet -> {
+                val context = LocalContext.current
+                val settings by context.container.settings.settings.collectAsStateWithLifecycle(initialValue = Settings())
+                WidgetFrame("~/pet", frame) {
+                    TerminalPet(
+                        Modifier.fillMaxSize().padding(6.dp),
+                        petType = settings.petType,
+                        onCycle = {
+                            val all = listOf("cat", "dog", "dino", "duck", "ghost", "crab")
+                            val next = all[(all.indexOf(settings.petType) + 1) % all.size]
+                            actions.updateSettings { it.copy(petType = next) }
+                        },
+                    )
+                }
+            }
             is ItemContent.AppWidget -> HostedWidget(content, width - 8.dp, height - 8.dp)
             is ItemContent.App -> Unit
         }

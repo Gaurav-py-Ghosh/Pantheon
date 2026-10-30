@@ -509,6 +509,29 @@ fun SettingsScreen(
                     checked = settings.imageFill,
                     onToggle = { onUpdateSettings { s -> s.copy(imageFill = !s.imageFill) } },
                 )
+                ToggleRow(
+                    label = "music_island",
+                    checked = settings.musicIsland,
+                    onToggle = { onUpdateSettings { s -> s.copy(musicIsland = !s.musicIsland) } },
+                )
+                ToggleRow(
+                    label = "terminal_pet",
+                    checked = settings.pet,
+                    onToggle = { onUpdateSettings { s -> s.copy(pet = !s.pet) } },
+                )
+                val petTypes = listOf("cat", "dog", "dino", "duck", "ghost", "crab")
+                CycleRow(
+                    label = "pet_type",
+                    value = settings.petType,
+                    onPrev = {
+                        val idx = (petTypes.indexOf(settings.petType) - 1 + petTypes.size) % petTypes.size
+                        onUpdateSettings { s -> s.copy(petType = petTypes[idx]) }
+                    },
+                    onNext = {
+                        val idx = (petTypes.indexOf(settings.petType) + 1) % petTypes.size
+                        onUpdateSettings { s -> s.copy(petType = petTypes[idx]) }
+                    },
+                )
             }
 
             // [gestures]

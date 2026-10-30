@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationManagerCompat
+import dev.pantheon.launcher.container
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,6 +44,7 @@ class PantheonNotificationListener : NotificationListenerService() {
         activeInstance = this
         _dnd.value = currentInterruptionFilter.isDnd()
         updateCounts()
+        runCatching { applicationContext.container.music.bindSessions() }
     }
 
     override fun onInterruptionFilterChanged(interruptionFilter: Int) {
@@ -62,11 +64,13 @@ class PantheonNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         updateCounts()
+        runCatching { applicationContext.container.music.bindSessions() }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         super.onNotificationRemoved(sbn)
         updateCounts()
+        runCatching { applicationContext.container.music.bindSessions() }
     }
 
     fun updateCounts() {

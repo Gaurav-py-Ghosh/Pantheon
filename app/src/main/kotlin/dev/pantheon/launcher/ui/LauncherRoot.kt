@@ -5,6 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import dev.pantheon.launcher.ui.components.MusicIsland
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +68,7 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
     val layoutState = c.layout.layout.collectAsStateWithLifecycle()
     val notifications by c.notifications.collectAsStateWithLifecycle()
     val notificationItems by c.notificationItems.collectAsStateWithLifecycle()
+    val musicTrack by c.music.currentTrack.collectAsStateWithLifecycle()
     val byKey = remember(apps) { apps.associateBy { it.key } }
     val tags = remember(apps, settings.tags) { apps.associate { it.key to c.tags.tagFor(it, settings.tags) } }
 
@@ -184,6 +189,27 @@ fun LauncherRoot(settings: Settings, homePresses: Flow<Unit>) {
                         translationY = -drawerDrop * (1f - np)
                         if (settings.glitch && np in 0.05f..0.95f) {
                             translationX = ((np * 137).toInt() % 7 - 3) * with(density) { 3.dp.toPx() }
+                        }
+                    },
+                )
+            }
+        }
+
+        if (settings.musicIsland && musicTrack != null && !notifDrawerVisible) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                MusicIsland(
+                    track = musicTrack!!,
+                    isAtCutout = true,
+                    onOpenApp = {
+                        val pkg = musicTrack?.packageName
+                        if (pkg != null) {
+                            val intent = context.packageManager.getLaunchIntentForPackage(pkg)
+                            if (intent != null) context.startActivity(intent)
                         }
                     },
                 )

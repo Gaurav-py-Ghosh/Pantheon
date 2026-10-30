@@ -121,6 +121,7 @@ interface HomeActions {
     fun requestPhotoAccess()
     fun requestCalendarAccess()
     fun onDoubleTap()
+    fun updateSettings(transform: (Settings) -> Settings)
 }
 
 @Composable
@@ -158,7 +159,7 @@ fun HomeScreen(
             .padding(horizontal = 16.dp),
     ) {
         if (settings.hideStatusBar) {
-            TopStrip(showPet = settings.pet)
+            TopStrip(settings = settings, onCyclePet = { val all = listOf("cat", "dog", "dino", "duck", "ghost", "crab"); val next = all[(all.indexOf(settings.petType) + 1) % all.size]; actions.updateSettings { it.copy(petType = next) } })
             Spacer(Modifier.height(4.dp))
         } else {
             Spacer(Modifier.height(10.dp))
@@ -205,7 +206,7 @@ fun HomeScreen(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TopStrip(showPet: Boolean) {
+private fun TopStrip(settings: Settings, onCyclePet: () -> Unit) {
     val context = LocalContext.current
     val colors = Pantheon.colors
     val stats = context.container.stats
@@ -234,7 +235,7 @@ private fun TopStrip(showPet: Boolean) {
                 .fillMaxHeight()
                 .padding(horizontal = 10.dp, vertical = 2.dp),
         ) {
-            if (showPet) TerminalPet(Modifier.fillMaxSize())
+            if (settings.pet) TerminalPet(Modifier.fillMaxSize(), petType = settings.petType, onCycle = onCyclePet)
         }
         snap?.let { s ->
             TText((if (s.charging) "+" else "") + "${s.battery}%", color = if (s.battery <= 15) colors.warn else colors.text, size = 12.sp)

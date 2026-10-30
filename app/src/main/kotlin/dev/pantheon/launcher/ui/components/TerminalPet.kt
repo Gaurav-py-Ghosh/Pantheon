@@ -32,26 +32,152 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
-/*
- * A pixel cat drawn in the accent color. Sprites face left; `#` is a lit pixel, `o` an eye.
- * Rows 0-4 are the head, 5-7 the body and legs, so frames only swap the bottom rows.
- */
-private val HEAD = listOf(
-    ".#...#.......",
-    ".##.##.......",
-    ".#####......#",
-    ".#o#o#.....#.",
-    ".#####....#..",
-)
-private val HEAD_BLINK = HEAD.map { it.replace('o', '#') }
-private val WALK_A = listOf("..##########.", "..#########..", "..#.#...#.#..")
-private val WALK_B = listOf("..##########.", "..#########..", "...#.#...#.#.")
-private val SIT = listOf("..########...", "..########.##", "..##....####.")
-private val SLEEP = listOf(".############", ".############", ".............")
 private const val SPRITE_W = 13
 private const val SPRITE_H = 8
 
 private enum class Mood { WALK, SIT, SLEEP }
+
+private data class PetSprite(
+    val head: List<String>,
+    val headBlink: List<String>,
+    val walkA: List<String>,
+    val walkB: List<String>,
+    val sit: List<String>,
+    val sleep: List<String>,
+    val sound: String,
+)
+
+private val CAT_SPRITE = PetSprite(
+    head = listOf(
+        ".#...#.......",
+        ".##.##.......",
+        ".#####......#",
+        ".#o#o#.....#.",
+        ".#####....#..",
+    ),
+    headBlink = listOf(
+        ".#...#.......",
+        ".##.##.......",
+        ".#####......#",
+        ".#####.....#.",
+        ".#####....#..",
+    ),
+    walkA = listOf("..##########.", "..#########..", "..#.#...#.#.."),
+    walkB = listOf("..##########.", "..#########..", "...#.#...#.#."),
+    sit = listOf("..########...", "..########.##", "..##....####."),
+    sleep = listOf(".############", ".############", "............."),
+    sound = "<3",
+)
+
+private val DOG_SPRITE = PetSprite(
+    head = listOf(
+        ".##..........",
+        ".####.......#",
+        ".##o#......#.",
+        ".####.....#..",
+        "..#####..#...",
+    ),
+    headBlink = listOf(
+        ".##..........",
+        ".####.......#",
+        ".####......#.",
+        ".####.....#..",
+        "..#####..#...",
+    ),
+    walkA = listOf("..##########.", "..#########..", "..#.#...#.#.."),
+    walkB = listOf("..##########.", "..#########..", "...#.#...#.#."),
+    sit = listOf("..########...", "..########.##", "..##....####."),
+    sleep = listOf(".############", ".############", "............."),
+    sound = "[woof!]",
+)
+
+private val DINO_SPRITE = PetSprite(
+    head = listOf(
+        "....######...",
+        "....#o####...",
+        "....######...",
+        "....####.....",
+        "...########..",
+    ),
+    headBlink = listOf(
+        "....######...",
+        "....######...",
+        "....######...",
+        "....####.....",
+        "...########..",
+    ),
+    walkA = listOf("..#########..", "...#...#.....", "...##..##...."),
+    walkB = listOf("..#########..", "....#...#....", "...##..##...."),
+    sit = listOf("..#########..", "..##########.", "....####....."),
+    sleep = listOf(".############", ".############", "............."),
+    sound = "*rawr*",
+)
+
+private val DUCK_SPRITE = PetSprite(
+    head = listOf(
+        "......####...",
+        "....###o##...",
+        "...######....",
+        ".....#####...",
+        "....#######..",
+    ),
+    headBlink = listOf(
+        "......####...",
+        "....######...",
+        "...######....",
+        ".....#####...",
+        "....#######..",
+    ),
+    walkA = listOf("..#########..", "...#######...", "....#...#...."),
+    walkB = listOf("..#########..", "...#######...", ".....#...#..."),
+    sit = listOf("..#########..", "..#########..", "....#####...."),
+    sleep = listOf("..#########..", ".............", "............."),
+    sound = "[quack]",
+)
+
+private val GHOST_SPRITE = PetSprite(
+    head = listOf(
+        "....#####....",
+        "...#######...",
+        "..##o###o##..",
+        "..#########..",
+        "..#########..",
+    ),
+    headBlink = listOf(
+        "....#####....",
+        "...#######...",
+        "..#########..",
+        "..#########..",
+        "..#########..",
+    ),
+    walkA = listOf("..#########..", "..#########..", "...#.#.#.#..."),
+    walkB = listOf("..#########..", "..#########..", "...#.#.#.#..."),
+    sit = listOf("..#########..", "..#########..", "....#####...."),
+    sleep = listOf("....#####....", "...#######...", "............."),
+    sound = "[boo!]",
+)
+
+private val CRAB_SPRITE = PetSprite(
+    head = listOf(
+        ".#.........#.",
+        ".##...#...##.",
+        ".###.###.###.",
+        "..##o###o##..",
+        "...#######...",
+    ),
+    headBlink = listOf(
+        ".#.........#.",
+        ".##...#...##.",
+        ".###.###.###.",
+        "..#########..",
+        "...#######...",
+    ),
+    walkA = listOf("..#########..", ".###.###.###.", ".#.........#."),
+    walkB = listOf("..#########..", ".###.###.###.", "..#.......#.."),
+    sit = listOf("..#########..", "..#########..", "...#######..."),
+    sleep = listOf("...#######...", "..#########..", "............."),
+    sound = "*snip*",
+)
 
 @Composable
 private fun rememberIsResumed(): Boolean {
@@ -61,33 +187,46 @@ private fun rememberIsResumed(): Boolean {
 }
 
 /**
- * Wanders left and right inside its box, sits and blinks now and then, sleeps at night, and hops
- * with a `<3` when tapped. Animates in pixel steps at 10 fps, and only while home is in front.
+ * Camera-aware cyber pixel pet that wanders, acknowledges the punch-hole cutout,
+ * perches against it, peeks, and responds to taps and long-presses to cycle pets.
  */
 @Composable
-fun TerminalPet(modifier: Modifier = Modifier) {
+fun TerminalPet(
+    modifier: Modifier = Modifier,
+    petType: String = "cat",
+    onCycle: (() -> Unit)? = null,
+) {
     val colors = Pantheon.colors
     val density = LocalDensity.current
     val resumed = rememberIsResumed()
 
+    val sprite = when (petType.lowercase()) {
+        "dog" -> DOG_SPRITE
+        "dino" -> DINO_SPRITE
+        "duck" -> DUCK_SPRITE
+        "ghost" -> GHOST_SPRITE
+        "crab" -> CRAB_SPRITE
+        else -> CAT_SPRITE
+    }
+
     BoxWithConstraints(modifier) {
         val boxW = with(density) { maxWidth.toPx() }
         val boxH = with(density) { maxHeight.toPx() }
-        // Fit eight sprite rows in ~70% of the height, in whole device pixels so it stays crisp.
         val pixel = (boxH * 0.7f / SPRITE_H).toInt().coerceIn(2, with(density) { 4.dp.roundToPx() }).toFloat()
         val spriteW = SPRITE_W * pixel
         val spriteH = SPRITE_H * pixel
         val maxX = (boxW - spriteW).coerceAtLeast(0f)
 
-        var x by remember { mutableFloatStateOf(Random.nextFloat() * maxX) }
-        var facingLeft by remember { mutableStateOf(Random.nextBoolean()) }
+        var x by remember { mutableFloatStateOf(0f) }
+        var facingLeft by remember { mutableStateOf(true) }
         var mood by remember { mutableStateOf(Mood.WALK) }
         var frame by remember { mutableIntStateOf(0) }
         var blink by remember { mutableStateOf(false) }
         var hopTicks by remember { mutableIntStateOf(0) }
         var heartTicks by remember { mutableIntStateOf(0) }
+        var customBubble by remember { mutableStateOf<String?>(null) }
 
-        LaunchedEffect(resumed, maxX, pixel) {
+        LaunchedEffect(resumed, maxX, pixel, petType) {
             if (!resumed) return@LaunchedEffect
             var moodTicks = 0
             while (true) {
@@ -96,14 +235,21 @@ fun TerminalPet(modifier: Modifier = Modifier) {
                 moodTicks--
                 if (hopTicks > 0) hopTicks--
                 if (heartTicks > 0) heartTicks--
+
                 val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
                 val night = hour >= 23 || hour < 7
+
                 when (mood) {
                     Mood.WALK -> {
                         x += if (facingLeft) -pixel else pixel
+
                         if (x <= 0f) { x = 0f; facingLeft = false }
                         if (x >= maxX) { x = maxX; facingLeft = true }
-                        if (Random.nextInt(100) < 2) { mood = Mood.SIT; moodTicks = Random.nextInt(20, 60) }
+
+                        if (Random.nextInt(100) < 3) {
+                            mood = Mood.SIT
+                            moodTicks = Random.nextInt(20, 60)
+                        }
                     }
                     Mood.SIT -> {
                         blink = frame % 30 in 0..1
@@ -115,37 +261,51 @@ fun TerminalPet(modifier: Modifier = Modifier) {
                     }
                     Mood.SLEEP -> {
                         blink = true
-                        if (moodTicks <= 0 && !night) { mood = Mood.SIT; moodTicks = 20; blink = false }
+                        if (moodTicks <= 0 && !night) {
+                            mood = Mood.SIT
+                            moodTicks = 20
+                            blink = false
+                        }
                     }
                 }
             }
         }
 
-        val hop = if (hopTicks > 0) sin((6 - hopTicks) / 6f * Math.PI).toFloat() * spriteH * 0.6f else 0f
+        val hop = if (hopTicks > 0) sin((6 - hopTicks) / 6f * Math.PI).toFloat() * spriteH * 0.7f else 0f
         val baseY = boxH - spriteH
 
         Canvas(
             Modifier
                 .fillMaxSize()
-                .pointerInput(maxX) {
-                    detectTapGestures { tap ->
-                        if (tap.x in x - pixel * 4..x + spriteW + pixel * 4) {
-                            mood = Mood.WALK
-                            blink = false
-                            hopTicks = 6
-                            heartTicks = 12
-                        }
-                    }
+                .pointerInput(maxX, onCycle) {
+                    detectTapGestures(
+                        onTap = { tap ->
+                            if (tap.x in (x - pixel * 5)..(x + spriteW + pixel * 5)) {
+                                mood = Mood.WALK
+                                blink = false
+                                hopTicks = 6
+                                heartTicks = 14
+                                customBubble = sprite.sound
+                            }
+                        },
+                        onLongPress = { tap ->
+                            if (tap.x in (x - pixel * 5)..(x + spriteW + pixel * 5)) {
+                                onCycle?.invoke()
+                                hopTicks = 8
+                                heartTicks = 16
+                                customBubble = "*switch!*"
+                            }
+                        },
+                    )
                 },
         ) {
-            val head = if (blink) HEAD_BLINK else HEAD
+            val head = if (blink) sprite.headBlink else sprite.head
             val body = when (mood) {
-                Mood.WALK -> if (frame % 2 == 0) WALK_A else WALK_B
-                Mood.SIT -> SIT
-                Mood.SLEEP -> SLEEP
+                Mood.WALK -> if (frame % 2 == 0) sprite.walkA else sprite.walkB
+                Mood.SIT -> sprite.sit
+                Mood.SLEEP -> sprite.sleep
             }
-            // Asleep it curls into a loaf: head tucked down two rows, eyes hidden.
-            val rows = if (mood == Mood.SLEEP) List(2) { "............." } + HEAD.take(3) + body else head + body
+            val rows = if (mood == Mood.SLEEP) List(2) { "............." } + sprite.head.take(3) + body else head + body
             val px = Size(pixel, pixel)
             rows.forEachIndexed { r, line ->
                 line.forEachIndexed { c, ch ->
@@ -158,10 +318,11 @@ fun TerminalPet(modifier: Modifier = Modifier) {
         }
 
         val bubble = when {
-            heartTicks > 0 -> "<3"
+            heartTicks > 0 -> customBubble ?: sprite.sound
             mood == Mood.SLEEP -> if (frame / 8 % 2 == 0) "z" else "zZ"
             else -> null
         }
+
         if (bubble != null) {
             val bx = (x + if (facingLeft) -pixel * 3 else spriteW).roundToInt()
             val by = (baseY - hop - pixel * 4).roundToInt().coerceAtLeast(0)

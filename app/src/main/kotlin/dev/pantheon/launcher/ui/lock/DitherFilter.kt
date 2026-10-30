@@ -59,6 +59,19 @@ object DitherFilter {
         imageBitmap
     }
 
+    suspend fun ditherBitmap(
+        raw: Bitmap,
+        fgColor: Int,
+        targetWidth: Int = 1080,
+    ): ImageBitmap = withContext(Dispatchers.Default) {
+        val scale = targetWidth.toFloat() / raw.width
+        val targetHeight = (raw.height * scale).toInt().coerceAtLeast(1)
+        val scaled = Bitmap.createScaledBitmap(raw, targetWidth, targetHeight, true)
+        val dithered = applyBayer8(scaled, pixelSize = 2, contrast = 1.45f, brightness = -0.04f, fgColor = fgColor)
+        if (scaled != raw) scaled.recycle()
+        dithered.asImageBitmap()
+    }
+
     private fun applyBayer8(
         source: Bitmap,
         pixelSize: Int,

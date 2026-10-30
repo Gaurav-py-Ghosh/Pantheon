@@ -83,6 +83,7 @@ object Actions {
             Command.BT -> start(context, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
             Command.TORCH -> context.container.torch.toggle()
             Command.SETTINGS -> start(context, Intent(Settings.ACTION_SETTINGS))
+            Command.MUSIC -> context.container.music.toggleDemo()
         }
         return null
     }

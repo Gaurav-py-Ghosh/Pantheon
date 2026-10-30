@@ -13,6 +13,7 @@ enum class Command(val word: String, val hint: String) {
     TORCH("torch", "toggle flashlight"),
     SETTINGS("settings", "android settings"),
     CALC("calc", "calc <expr>"),
+    MUSIC("music", "toggle music island demo"),
     ;
 
     companion object {

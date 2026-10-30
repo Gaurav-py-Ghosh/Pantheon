@@ -91,7 +91,7 @@ class LauncherController(
 
     private fun currentPage(): HomePage? = layout?.let { l -> l.pages.getOrNull(pager.currentPage.coerceIn(0, l.pages.lastIndex)) }
 
-    fun updateSettings(transform: (Settings) -> Settings) {
+    override fun updateSettings(transform: (Settings) -> Settings) {
         scope.launch { c.settings.update(transform) }
     }
 
@@ -215,6 +215,7 @@ class LauncherController(
         val anchor = Rect(at, Size.Zero)
         val cell = geometry.targetAt(at, currentPage()?.id) as? DropTarget.Cell
         val target = WidgetTarget(pager.currentPage, cell?.x ?: 0, cell?.y ?: 0)
+        val isMusicActive = c.music.currentTrack.value != null
         menu.show(
             MenuSpec(
                 anchor,
@@ -224,6 +225,7 @@ class LauncherController(
                     MenuItem("add widget", hint = "›") { pickingWidget = target },
                     MenuItem("add image") { addImageWidget(target) },
                     MenuItem("pages", hint = "›") { pagesMenu(anchor) },
+                    MenuItem(if (isMusicActive) "stop music demo" else "play music demo") { c.music.toggleDemo() },
                     MenuItem("settings") { showingSettings = true },
                 ),
             ),

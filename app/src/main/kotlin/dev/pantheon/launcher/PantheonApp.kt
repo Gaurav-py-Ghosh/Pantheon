@@ -9,6 +9,7 @@ import dev.pantheon.launcher.data.IconCache
 import dev.pantheon.launcher.data.IconPackManager
 import dev.pantheon.launcher.data.LayoutRepository
 import dev.pantheon.launcher.data.MediaRepository
+import dev.pantheon.launcher.data.MusicRepository
 import dev.pantheon.launcher.data.NotesRepository
 import dev.pantheon.launcher.data.SettingsRepository
 import dev.pantheon.launcher.data.SystemStats
@@ -46,6 +47,7 @@ class AppContainer(app: Application) {
     val tags = TagResolver(app)
     val torch by lazy { Torch(app) }
     val media = MediaRepository(app)
+    val music = MusicRepository(app, scope)
     val calendar = CalendarRepository(app)
     val notes = NotesRepository(app, scope)
     val widgets = WidgetHostRepository(app)
@@ -60,6 +62,7 @@ class AppContainer(app: Application) {
                 .first { (a, l) -> l.seeded || a.isNotEmpty() }
             if (!layout.seeded) this@AppContainer.layout.seed(apps)
             PantheonNotificationListener.refresh(app)
+            music.bindSessions()
         }
     }
 }

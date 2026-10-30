@@ -20,10 +20,12 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.pantheon.launcher.data.BackgroundMode
 import dev.pantheon.launcher.ui.LauncherRoot
+import dev.pantheon.launcher.ui.components.MusicIslandOverlayService
 import dev.pantheon.launcher.ui.lock.LockScreenActivity
 import dev.pantheon.launcher.ui.theme.Pantheon
 import dev.pantheon.launcher.ui.theme.PantheonTheme
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
@@ -53,20 +55,17 @@ class MainActivity : ComponentActivity() {
         // One tiny DataStore read so the first frame already has the right theme.
         val initial = runBlocking { settingsRepo.settings.first() }
 
+        runCatching {
+            startService(Intent(this, MusicIslandOverlayService::class.java))
+        }
+
         setContent {
             val settings by settingsRepo.settings.collectAsStateWithLifecycle(initial)
             PantheonTheme(settings) {
                 val dark = Pantheon.colors.isDark
                 val isWallpaper = settings.backgroundMode == BackgroundMode.WALLPAPER
-                val hideStatusBar = settings.hideStatusBar
-                LaunchedEffect(dark, isWallpaper, hideStatusBar) {
-                    if (isWallpaper) {
-                        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
-                        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-                    } else {
-                        window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
-                        window.setBackgroundDrawable(null)
-                    }
+
+                LaunchedEffect(dark, isWallpaper) {
                     val style = if (dark) {
                         SystemBarStyle.dark(Color.TRANSPARENT)
                     } else {
@@ -74,14 +73,26 @@ class MainActivity : ComponentActivity() {
                     }
                     enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
 
-                    val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                    @Suppress("DEPRECATION")
+                    if (isWallpaper) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+                        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+                    }
+                }
+
+                // Hide/show system status bar based on hideStatusBar setting
+                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                LaunchedEffect(settings.hideStatusBar) {
                     insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    if (hideStatusBar) {
+                    if (settings.hideStatusBar) {
                         insetsController.hide(WindowInsetsCompat.Type.statusBars())
                     } else {
                         insetsController.show(WindowInsetsCompat.Type.statusBars())
                     }
                 }
+
                 LauncherRoot(settings, homePresses)
             }
         }
@@ -89,7 +100,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        runCatching { unregisterReceiver(screenOffReceiver) }
+        unregisterReceiver(screenOffReceiver)
     }
 
     /** Set by the launcher before starting a widget's setup screen. */
@@ -107,12 +118,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        isForeground = true
         runCatching { container.widgets.host.startListening() }
         dev.pantheon.launcher.notifications.PantheonNotificationListener.refresh(this)
+        container.music.bindSessions()
     }
 
     override fun onStop() {
         super.onStop()
+        isForeground = false
         runCatching { container.widgets.host.stopListening() }
     }
 
@@ -134,5 +148,9 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val REQUEST_CONFIGURE_WIDGET = 0x5041
+        val isForegroundFlow = MutableStateFlow(false)
+        var isForeground: Boolean
+            get() = isForegroundFlow.value
+            set(value) { isForegroundFlow.value = value }
     }
 }

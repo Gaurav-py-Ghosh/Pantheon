@@ -69,6 +69,10 @@ data class Settings(
     val lockArt: String = "adam",
     /** The pixel cat in the top strip. */
     val pet: Boolean = true,
+    /** Dynamic Music Island banner & pill when music is playing. */
+    val musicIsland: Boolean = true,
+    /** Type of pixel pet: cat, dog, dino, duck, ghost, crab. */
+    val petType: String = "cat",
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -99,6 +103,8 @@ class SettingsRepository(private val context: Context) {
         val lockScreen = booleanPreferencesKey("lock_screen")
         val lockArt = stringPreferencesKey("lock_art")
         val pet = booleanPreferencesKey("pet")
+        val musicIsland = booleanPreferencesKey("music_island")
+        val petType = stringPreferencesKey("pet_type")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map(::read).distinctUntilChanged()
@@ -138,6 +144,8 @@ class SettingsRepository(private val context: Context) {
             lockScreen = p[K.lockScreen] ?: d.lockScreen,
             lockArt = p[K.lockArt] ?: d.lockArt,
             pet = p[K.pet] ?: d.pet,
+            musicIsland = p[K.musicIsland] ?: d.musicIsland,
+            petType = p[K.petType] ?: d.petType,
         )
     }
 
@@ -166,6 +174,8 @@ class SettingsRepository(private val context: Context) {
         p[K.lockScreen] = s.lockScreen
         p[K.lockArt] = s.lockArt
         p[K.pet] = s.pet
+        p[K.musicIsland] = s.musicIsland
+        p[K.petType] = s.petType
     }
 }
 

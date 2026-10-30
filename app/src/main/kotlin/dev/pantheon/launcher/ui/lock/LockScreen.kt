@@ -51,6 +51,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.pantheon.launcher.container
 import dev.pantheon.launcher.data.Settings
 import dev.pantheon.launcher.ui.components.BlinkingCursor
+import dev.pantheon.launcher.ui.components.IslandMode
+import dev.pantheon.launcher.ui.components.MusicIsland
 import dev.pantheon.launcher.ui.components.TText
 import dev.pantheon.launcher.ui.components.terminalBox
 import dev.pantheon.launcher.ui.theme.Pantheon
@@ -74,6 +76,7 @@ fun LockScreen(
     val c = context.container
     val notifications by c.notificationItems.collectAsStateWithLifecycle()
     val stats by c.stats.snapshots.collectAsStateWithLifecycle(null)
+    val musicTrack by c.music.currentTrack.collectAsStateWithLifecycle()
 
     var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -90,7 +93,12 @@ fun LockScreen(
     var granted by remember { mutableStateOf(false) }
     val glitchAlpha = remember { Animatable(1f) }
 
-    LaunchedEffect(colors.accent, settings.lockArt) {
+    LaunchedEffect(colors.accent, settings.lockArt, musicTrack?.albumArt) {
+        val art = musicTrack?.albumArt
+        if (art != null) {
+            ditherBitmap = DitherFilter.ditherBitmap(art, colors.accent.toArgb(), targetWidth = 1080)
+            return@LaunchedEffect
+        }
         ditherBitmap = if (settings.lockArt == "none") {
             null
         } else {
@@ -178,6 +186,15 @@ fun LockScreen(
                     )
                     TText("STATUS: ENCRYPTED", color = colors.textDim, size = 10.sp)
                 }
+            }
+
+            if (settings.musicIsland && musicTrack != null) {
+                MusicIsland(
+                    track = musicTrack!!,
+                    initialMode = IslandMode.DOCK,
+                    isAtCutout = false,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
             }
 
             // Center Area: Clock + Creation of Adam Art
