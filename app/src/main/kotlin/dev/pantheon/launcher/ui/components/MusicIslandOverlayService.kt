@@ -108,7 +108,7 @@ class MusicIslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryO
                         ) {
                             MusicIsland(
                                 track = track!!,
-                                initialMode = IslandMode.EXPANDED,
+                                initialMode = IslandMode.CIRCLE,
                                 isAtCutout = true,
                                 onModeChanged = { newMode ->
                                     val currentParams = overlayParams ?: return@MusicIsland
@@ -143,8 +143,8 @@ class MusicIslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryO
             WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
 
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            (48 * density).toInt(),
+            (40 * density).toInt(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             flags,
             PixelFormat.TRANSLUCENT,

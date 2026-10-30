@@ -75,22 +75,34 @@ fun MusicIsland(
     onModeChanged: ((IslandMode) -> Unit)? = null,
     onOpenApp: (() -> Unit)? = null,
 ) {
-    var mode by remember(track.title) { mutableStateOf(initialMode) }
+    var mode by remember { mutableStateOf(initialMode) }
 
     LaunchedEffect(mode) {
         onModeChanged?.invoke(mode)
     }
 
-    // Glance delay: in PILL or EXPANDED (when started initially on track change),
-    // collapse to a sleek CIRCLE around camera cutout after glance delay
-    LaunchedEffect(track.title, track.isPlaying, isAtCutout) {
-        if (isAtCutout && initialMode == IslandMode.EXPANDED) {
-            delay(3500L)
-            mode = IslandMode.CIRCLE
+    var lastTrackKey by remember { mutableStateOf(track.title + track.artist) }
+
+    // When the track actually changes while playing:
+    LaunchedEffect(track.title, track.artist, track.isPlaying) {
+        val currentKey = track.title + track.artist
+        if (currentKey != lastTrackKey && track.isPlaying) {
+            lastTrackKey = currentKey
+            if (isAtCutout) {
+                if (initialMode == IslandMode.CIRCLE) {
+                    mode = IslandMode.EXPANDED
+                    delay(3500L)
+                    mode = IslandMode.CIRCLE
+                } else if (initialMode == IslandMode.PILL) {
+                    mode = IslandMode.PILL
+                    delay(2000L)
+                    mode = IslandMode.CIRCLE
+                }
+            }
         }
     }
 
-    LaunchedEffect(mode, track.title, track.isPlaying, isAtCutout) {
+    LaunchedEffect(mode, isAtCutout) {
         if (isAtCutout && mode == IslandMode.PILL) {
             delay(2000L)
             mode = IslandMode.CIRCLE

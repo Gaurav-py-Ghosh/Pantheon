@@ -49,6 +49,7 @@ class MusicRepository(
     private var activeController: MediaController? = null
     private val handler = Handler(Looper.getMainLooper())
     private var tickerJob: Job? = null
+    private var pauseJob: Job? = null
 
     // Built-in demo track state
     private var demoPlaying: Boolean = false
@@ -75,6 +76,8 @@ class MusicRepository(
         override fun onSessionDestroyed() {
             activeController = null
             if (!demoPlaying) {
+                pauseJob?.cancel()
+                pauseJob = null
                 _currentTrack.value = null
                 stopTicker()
             }
@@ -107,14 +110,28 @@ class MusicRepository(
             return
         }
 
-        // Prefer currently playing session, or fallback to the most recent one
-        val candidate = controllers.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
-            ?: controllers.firstOrNull()
+        val playingCandidate = controllers.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+        val candidate = playingCandidate ?: controllers.firstOrNull {
+            val st = it.playbackState?.state
+            st == PlaybackState.STATE_PAUSED || st == PlaybackState.STATE_BUFFERING
+        }
+
+        if (candidate == null) {
+            if (!demoPlaying) {
+                activeController?.unregisterCallback(mediaCallback)
+                activeController = null
+                _currentTrack.value = null
+                stopTicker()
+                pauseJob?.cancel()
+                pauseJob = null
+            }
+            return
+        }
 
         if (candidate != activeController) {
             activeController?.unregisterCallback(mediaCallback)
             activeController = candidate
-            candidate?.registerCallback(mediaCallback, handler)
+            candidate.registerCallback(mediaCallback, handler)
         }
         updateFromController(candidate)
     }
@@ -124,13 +141,40 @@ class MusicRepository(
             if (!demoPlaying) {
                 _currentTrack.value = null
                 stopTicker()
+                pauseJob?.cancel()
+                pauseJob = null
             }
             return
         }
 
         val metadata = controller.metadata
         val state = controller.playbackState
-        val isPlaying = state?.state == PlaybackState.STATE_PLAYING
+        val pbState = state?.state ?: PlaybackState.STATE_NONE
+        if (pbState == PlaybackState.STATE_NONE || pbState == PlaybackState.STATE_STOPPED || pbState == PlaybackState.STATE_ERROR) {
+            if (!demoPlaying) {
+                _currentTrack.value = null
+                stopTicker()
+                pauseJob?.cancel()
+                pauseJob = null
+            }
+            return
+        }
+
+        val isPlaying = pbState == PlaybackState.STATE_PLAYING
+        if (isPlaying) {
+            pauseJob?.cancel()
+            pauseJob = null
+        } else if (!demoPlaying) {
+            if (pauseJob == null) {
+                pauseJob = scope.launch {
+                    delay(4000L)
+                    if (!demoPlaying && activeController?.playbackState?.state != PlaybackState.STATE_PLAYING) {
+                        _currentTrack.value = null
+                        stopTicker()
+                    }
+                }
+            }
+        }
         val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
             ?: "audio stream"
